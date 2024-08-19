@@ -1,9 +1,9 @@
 import time
 from abc import ABC, abstractmethod
 
-from src.bot.bot_status import BotStatus
-from src.bot.bot_thread import BotThread
-from src.input.window import Window
+from src.pixeler.bot.bot_status import BotStatus
+from src.pixeler.bot.bot_thread import BotThread
+from src.pixeler.input.window import Window
 
 
 class Bot(ABC):

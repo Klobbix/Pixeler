@@ -5,8 +5,8 @@ import mss
 import numpy as np
 import pyautogui
 
-import src.math.random as rd
-from src.math.point import Point
+import src.pixeler.math.random as rd
+from src.pixeler.math.point import Point
 
 
 class Rectangle:

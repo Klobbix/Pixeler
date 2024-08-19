@@ -5,7 +5,7 @@ from typing import Sequence
 
 import cv2
 
-from src.vision.color import Color
+from src.pixeler.vision.color import Color
 
 
 def mask_by_color(image: cv2.Mat, color: Color) -> cv2.Mat:
