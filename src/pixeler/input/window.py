@@ -1,13 +1,10 @@
-from typing import Union
-
 import pywinctl
-from pygetwindow import Win32Window, MacOSWindow
+from pygetwindow import BaseWindow
 from pywinbox import Point
-from pywinctl._pywinctl_linux import LinuxWindow
 
 
 class Window:
-    def __init__(self, handle: Union[Win32Window, LinuxWindow, MacOSWindow]):
+    def __init__(self, handle: BaseWindow):
         self.handle = handle
 
     @classmethod

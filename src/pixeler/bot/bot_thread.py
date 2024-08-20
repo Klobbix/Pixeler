@@ -9,11 +9,12 @@ class BotThread(threading.Thread):
         self.target = target
 
     def run(self):
+        id = self.__get_id()
         try:
-            print("Thread started")
+            print(f"Thread started with id {id}")
             self.target()
         finally:
-            print("Thread stopped")
+            print(f"Thread {id} stopped")
 
     def __get_id(self):
         """Returns id of the respective thread"""

@@ -7,7 +7,7 @@ from src.pixeler.input.window import Window
 
 
 class Bot(ABC):
-    def __init__(self, window: Window):
+    def __init__(self, window: Window = None):
         self.window = window
         self.status = BotStatus.STOPPED
         self.thread: BotThread = None
@@ -42,7 +42,6 @@ class Bot(ABC):
             self.status = BotStatus.RUNNING
             self.on_start()
             self.thread = BotThread(target=self.loop)
-            self.thread.daemon = True
             self.thread.start()
             self.start_time = time.time()
         elif self.status == BotStatus.RUNNING:

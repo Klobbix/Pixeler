@@ -9,7 +9,9 @@ interacting with a user’s screen in a human-like manner.
 By utilizing Optical Character Recognition (OCR) and Bézier curve-based mouse movements, Pixeler provides the tools
 necessary for building bots that can perform tasks like identifying text on the screen, responding to UI changes, and
 executing precise mouse interactions.
-Features
+
+
+### Features
 
     OCR-Based Screen Reading: Accurately read and interpret text on the screen, enabling bots to understand what’s happening in real-time.
     Human-like Mouse Movements: Simulate realistic, human-like mouse movements using Bézier curves to interact with UI elements naturally.
@@ -47,9 +49,11 @@ Coming soon!
 
 ### License
 Pixeler is licensed under the MIT License. See the LICENSE file for more details.
-Acknowledgments
 
-    Tesseract-OCR: For the powerful OCR capabilities.
+
+### Acknowledgments
+
+    pytesseract: For the powerful OCR capabilities.
     OpenCV: For the robust computer vision tools.
     PyAutoGUI: For providing easy-to-use cross-platform GUI automation tools.
 
