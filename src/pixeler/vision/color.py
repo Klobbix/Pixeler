@@ -1,11 +1,10 @@
-from typing import List, Union
+from typing import Sequence
 
-import cv2
 import numpy as np
 
 
 class Color:
-    def __init__(self, lower: List[int], upper: List[int] = None):
+    def __init__(self, lower: Sequence[float], upper: Sequence[float] = None):
         """
         Defines a color or range of colors. This class converts RGB colors to BGR to satisfy OpenCV's color format.
         Args:
@@ -14,29 +13,6 @@ class Color:
         """
         self.lower = np.array(lower[::-1])
         self.upper = np.array(upper[::-1]) if upper else np.array(lower[::-1])
-
-
-def isolate_colors(image: cv2.Mat, colors: Union[Color, List[Color]]) -> cv2.Mat:
-    """
-    Isolates ranges of colors within an image and saves a new resulting image.
-    Args:
-        image: The image to process.
-        colors: A Color or list of Colors.
-    Returns:
-        The image with the isolated colors (all shown as white).
-    """
-    if not isinstance(colors, list):
-        colors = [colors]
-    # Generate masks for each color
-    masks = [cv2.inRange(image, color.lower, color.upper) for color in colors]
-    # Create black mask
-    h, w = image.shape[:2]
-    mask = np.zeros([h, w, 1], dtype=np.uint8)
-    # Combine masks
-    for mask_ in masks:
-        mask = cv2.bitwise_or(mask, mask_)
-    return mask
-
 
 """Solid colors"""
 BLACK = Color([0, 0, 0])

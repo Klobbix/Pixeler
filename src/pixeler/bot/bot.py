@@ -1,13 +1,15 @@
 import time
 from abc import ABC, abstractmethod
+from typing import Union
 
 from src.pixeler.bot.bot_status import BotStatus
 from src.pixeler.bot.bot_thread import BotThread
+from src.pixeler.input.win32_window import Win32Window
 from src.pixeler.input.window import Window
 
 
 class Bot(ABC):
-    def __init__(self, window: Window = None):
+    def __init__(self, window: Union[Window | Win32Window] = None):
         self.window = window
         self.status = BotStatus.STOPPED
         self.thread: BotThread = None

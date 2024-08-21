@@ -13,7 +13,7 @@ class ExampleBot(Bot):
     def loop(self):
         while True:
             # Loops until ESC is pressed
-            k = cv2.waitKey(5) & 0xFF
+            k = cv2.waitKey(1)
             if k == 27:
                 self.stop()
 

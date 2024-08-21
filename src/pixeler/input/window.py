@@ -1,4 +1,6 @@
 import pywinctl
+from mss import mss
+from mss.screenshot import ScreenShot
 from pygetwindow import BaseWindow
 from pywinbox import Point
 
@@ -41,6 +43,32 @@ class Window:
         if self.handle:
             self.handle.activate()
 
+    def maximize(self):
+        """
+        Maximizes the instanced window object.
+        :return:
+        """
+        if self.handle:
+            self.handle.maximize()
+
+    def minimize(self):
+        """
+        Minimizes the instanced window object.
+        :return:
+        """
+        if self.handle:
+            self.handle.minimize()
+
+    def move(self, x: int, y: int):
+        """
+        Moves the instanced window object.
+        :param x: The x position of the window.
+        :param y: The y position of the window.
+        :return:
+        """
+        if self.handle:
+            self.handle.moveTo(x, y)
+
     def close(self):
         """
         Closes this window.
@@ -68,3 +96,14 @@ class Window:
         """
         if self.handle:
             self.handle.size = (width, height)
+
+    def screenshot(self, sct: mss) -> ScreenShot:
+        """
+        Takes a screenshot of the window and returns it.
+        :param sct: The mss sct object
+        :return: A mss ScreenShot of the window.
+        """
+        if self.handle:
+            pos = self.handle.position
+            box = {'top': pos.y, 'left': pos.x, 'width': self.handle.width, 'height': self.handle.height}
+            return sct.grab(box)

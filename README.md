@@ -35,7 +35,7 @@ You can install Pixeler via pip:
 
 ### Extend the bot
 
-Create your own class extending the Pixeler Bot class
+Create your own class extending the Pixeler Bot class:
 
 ```
 class MyBot(Bot):
@@ -49,7 +49,7 @@ bot = MyBot(title="Target Application")
 ```
 
 ### Examples
-See the **examples** folder.
+See the **examples** folder. There are plenty of scenarios represented here, from color tracking, screen reading, and Win32 overlays.
 
 
 ### License

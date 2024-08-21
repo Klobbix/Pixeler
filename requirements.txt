@@ -5,3 +5,4 @@ numpy==2.0.1
 mss==9.0.1
 pytesseract==0.3.13
 pyautogui==0.9.54
+pywin32==306
