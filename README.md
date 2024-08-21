@@ -19,6 +19,10 @@ executing precise mouse interactions.
     Window-Specific Targeting: Focus on specific windows based on their titles, allowing the bot to interact with the correct application.
     Flexible Automation: Design bots that can respond to changes in the UI dynamically, making them adaptable to various applications.
 
+### Third-Party Setup
+1. [Install Tesseract](https://github.com/UB-Mannheim/tesseract/releases/)
+2. Add Tesseract install path to PATH environment variables
+
 ### Installation
 
 You can install Pixeler via pip:
@@ -45,7 +49,7 @@ bot = MyBot(title="Target Application")
 ```
 
 ### Examples
-See the examples folder for Bot Usage examples. More coming soon!
+See the **examples** folder.
 
 
 ### License

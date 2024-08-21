@@ -5,7 +5,7 @@ def press(key: str):
     pag.press(key)
 
 
-def write(text: str, interval: float):
+def write(text: str, interval: float = 0.1):
     pag.write(text, interval=interval)
 
 

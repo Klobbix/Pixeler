@@ -3,6 +3,7 @@ from typing import Tuple
 
 import cv2
 import numpy as np
+from mss.screenshot import ScreenShot
 
 from src.pixeler.vision.color import Color
 
@@ -15,6 +16,15 @@ def load_mat_from_file(path: Path, flags: int = cv2.IMREAD_GRAYSCALE) -> cv2.Mat
     :return: A cv Mat
     """
     return cv2.imread(str(path), flags)
+
+
+def mss_to_cv2(screenshot: ScreenShot) -> cv2.Mat:
+    """
+    Converts a mss screenshot to a cv Mat.
+    :param screenshot: The screenshot to convert.
+    :return: A cv Mat
+    """
+    return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGRA2BGR)
 
 
 def convert(mat: cv2.Mat, code: int) -> cv2.Mat:

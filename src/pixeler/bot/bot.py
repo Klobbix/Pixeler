@@ -37,26 +37,40 @@ class Bot(ABC):
         pass
 
     def start(self):
+        """
+        Starts the bot by updating the internal status to RUNNING and starting the loop function on the BotThread.
+        :return:
+        """
         if self.status == BotStatus.STOPPED:
             self.log("Starting bot...")
             self.status = BotStatus.RUNNING
+            self.start_time = time.time()
             self.on_start()
             self.thread = BotThread(target=self.loop)
             self.thread.start()
-            self.start_time = time.time()
         elif self.status == BotStatus.RUNNING:
             self.log("Bot is already running.")
 
     def stop(self):
+        """
+        Stops the bot, updates the internal status to STOPPED, and stops/joins the BotThread.
+        :return:
+        """
         if self.status == BotStatus.STOPPED:
             self.log("Bot is not running.")
         elif self.status == BotStatus.RUNNING:
             self.log("Stopping bot...")
             self.status = BotStatus.STOPPED
+            self.log(f"Ran for {time.time() - self.start_time} seconds.")
             self.thread.stop()
             self.thread.join()
             self.on_stop()
 
     def log(self, message: str):
+        """
+        Generic log function.
+        :param message: The message to log.
+        :return:
+        """
         message = f"{time.ctime()}: {message}"
         print(message)
