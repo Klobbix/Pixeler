@@ -1,4 +1,5 @@
 # Pixeler
+[![Publish Python Package](https://github.com/Klobbix/Pixeler/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Klobbix/Pixeler/actions/workflows/python-publish.yml)
 
 ### This project is a work-in-progress!
 
@@ -44,7 +45,7 @@ bot = MyBot(title="Target Application")
 ```
 
 ### Examples
-Coming soon!
+See the examples folder for Bot Usage examples. More coming soon!
 
 
 ### License
