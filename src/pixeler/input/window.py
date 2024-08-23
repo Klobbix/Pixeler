@@ -133,4 +133,3 @@ class Window:
             }
             shot = sct.grab(box)
             return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
-

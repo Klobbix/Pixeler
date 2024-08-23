@@ -75,7 +75,6 @@ class Win32Window(Window):
         if self.handle:
             # Get the window's client rectangle (excluding title bar and borders)
             client_rect = win32gui.GetClientRect(self.get_hwnd())
-            #client_top_left = win32gui.ClientToScreen(self.get_hwnd(), (client_rect[0], client_rect[1]))
             client_top_left = self.handle.position
             client_bottom_right = win32gui.ClientToScreen(self.get_hwnd(), (client_rect[2], client_rect[3]))
 
