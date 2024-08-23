@@ -6,7 +6,7 @@ from src.pixeler.bot.bot import Bot
 from src.pixeler.input import mouse
 
 
-class WindowTracking(Bot):
+class MouseTracking(Bot):
     def on_start(self):
         pass
 
@@ -18,5 +18,5 @@ class WindowTracking(Bot):
             print(mouse.position())
 
 if __name__ == '__main__':
-    example = WindowTracking()
+    example = MouseTracking()
     example.start()

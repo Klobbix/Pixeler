@@ -1,3 +1,6 @@
+"""
+Captures colors on a webcam.
+"""
 from src.pixeler.bot.bot import Bot
 from src.pixeler.vision.utils import *
 

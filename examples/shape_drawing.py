@@ -9,7 +9,7 @@ from src.pixeler.bot.bot import Bot
 from src.pixeler.vision.color import GREEN
 
 
-class ScreenTracking(Bot):
+class ShapeDrawing(Bot):
     def on_start(self):
         pass
 
@@ -36,5 +36,5 @@ class ScreenTracking(Bot):
 
 
 if __name__ == '__main__':
-    example = ScreenTracking()
+    example = ShapeDrawing()
     example.start()

@@ -4,8 +4,8 @@ from typing import Union
 
 from src.pixeler.bot.bot_status import BotStatus
 from src.pixeler.bot.bot_thread import BotThread
-from src.pixeler.input.win32_window import Win32Window
-from src.pixeler.input.window import Window
+from src.pixeler.window.win32_window import Win32Window
+from src.pixeler.window.window import Window
 
 
 class Bot(ABC):
@@ -66,7 +66,7 @@ class Bot(ABC):
             self.log(f"Ran for {time.time() - self.start_time} seconds.")
             self.thread.stop()
             self.thread.join()
-            self.window.__destroy()
+            self.window.close()
             self.on_stop()
 
     def log(self, message: str):

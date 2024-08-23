@@ -5,10 +5,10 @@ import cv2
 
 import src.pixeler.input.keyboard as keyboard
 from src.pixeler.bot.bot import Bot
-from src.pixeler.input.window import Window
+from src.pixeler.window.window import Window
 
 
-class WindowTracking(Bot):
+class NotepadWriting(Bot):
     def on_start(self):
         print(f"Window positioned at: {self.window.position()}")
         self.window.focus()
@@ -23,5 +23,5 @@ class WindowTracking(Bot):
 
 
 if __name__ == '__main__':
-    example = WindowTracking(Window.from_title_contains("Notepad"))
+    example = NotepadWriting(Window("Notepad"))
     example.start()

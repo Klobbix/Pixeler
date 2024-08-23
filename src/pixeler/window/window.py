@@ -2,42 +2,28 @@ import cv2
 import numpy as np
 import pywinctl
 from mss import mss
-from pygetwindow import BaseWindow
 from pywinbox import Point
 
+from src.pixeler.window.abstract_window import AbstractWindow
 
-class Window:
-    def __init__(self, handle: BaseWindow):
-        self.handle = handle
 
-    @classmethod
-    def from_title(cls, title: str) -> 'Window':
+class Window(AbstractWindow):
+    def __init__(self, title: str):
+        self.mss = mss()
+        self.handle = self.__from_title(title)
+
+    def __from_title(self, title: str, condition: int = pywinctl.Re.CONTAINS):
         """
-        Creates a new Window instance from an exact title.
+        Creates a new BaseWindow instance from a title.
         :param title: The title of the window.
+        :param condition: Window finding flags
         :return: A new Window instance.
         """
-        windows = pywinctl.getWindowsWithTitle(title)
+        windows = pywinctl.getWindowsWithTitle(title, condition=condition)
         if windows:
-            return cls(windows[0])
+            return windows[0]
         else:
             raise Exception("No window with title: " + title)
-
-    @classmethod
-    def from_title_contains(cls, title: str) -> 'Window':
-        """
-       Creates a new Window instance from a title that contains a given text.
-       :param title: The title of the window to search for.
-       :return: A new Window instance.
-       """
-        windows = pywinctl.getWindowsWithTitle(title, condition=pywinctl.Re.CONTAINS)
-        if windows:
-            return cls(windows[0])
-        else:
-            raise Exception("No window with title: " + title)
-
-    def __destroy(self):
-        pass
 
     def focus(self):
         """
@@ -80,8 +66,25 @@ class Window:
         This is identical to clicking the X button on the window.
         :return:
         """
+        self.mss.close()
         if self.handle:
             self.handle.close()
+
+    def width(self):
+        """
+        Returns the width of the window.
+        :return: The width of the window.
+        """
+        if self.handle:
+            return self.handle.width
+
+    def height(self):
+        """
+        Returns the height of the window.
+        :return: The height of the window.
+        """
+        if self.handle:
+            return self.handle.height
 
     def position(self) -> Point:
         """
@@ -101,35 +104,13 @@ class Window:
         if self.handle:
             self.handle.size = (width, height)
 
-    def screenshot(self, sct: mss) -> cv2.Mat:
+    def screenshot(self) -> cv2.Mat:
         """
         Takes a screenshot of the window and returns it.
-        :param sct: The mss sct object
         :return: A Mat of the window.
         """
         if self.handle:
             box = {'top': self.handle.top, 'left': self.handle.left, 'width': self.handle.size.width,
                    'height': self.handle.height}
-            shot = sct.grab(box)
-            return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
-
-    def screenshot_monitor(self, sct: mss, monitor: int = 1) -> cv2.Mat:
-        """
-        Takes a screenshot of the entire monitor and returns it.
-        :param sct: The mss sct object
-        :return: A Mat of the window.
-        """
-        if self.handle:
-            # Get information of monitor 2
-            mon = sct.monitors[monitor]
-
-            # The screen part to capture
-            box = {
-                "top": mon["top"] + 100,  # 100px from the top
-                "left": mon["left"] + 100,  # 100px from the left
-                "width": mon["width"],
-                "height": mon["height"],
-                "mon": monitor,
-            }
-            shot = sct.grab(box)
+            shot = self.mss.grab(box)
             return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
