@@ -1,6 +1,7 @@
+import cv2
+import numpy as np
 import pywinctl
 from mss import mss
-from mss.screenshot import ScreenShot
 from pygetwindow import BaseWindow
 from pywinbox import Point
 
@@ -34,6 +35,9 @@ class Window:
             return cls(windows[0])
         else:
             raise Exception("No window with title: " + title)
+
+    def __destroy(self):
+        pass
 
     def focus(self):
         """
@@ -97,13 +101,36 @@ class Window:
         if self.handle:
             self.handle.size = (width, height)
 
-    def screenshot(self, sct: mss) -> ScreenShot:
+    def screenshot(self, sct: mss) -> cv2.Mat:
         """
         Takes a screenshot of the window and returns it.
         :param sct: The mss sct object
-        :return: A mss ScreenShot of the window.
+        :return: A Mat of the window.
         """
         if self.handle:
-            pos = self.handle.position
-            box = {'top': pos.y, 'left': pos.x, 'width': self.handle.width, 'height': self.handle.height}
-            return sct.grab(box)
+            box = {'top': self.handle.top, 'left': self.handle.left, 'width': self.handle.size.width,
+                   'height': self.handle.height}
+            shot = sct.grab(box)
+            return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
+
+    def screenshot_monitor(self, sct: mss, monitor: int = 1) -> cv2.Mat:
+        """
+        Takes a screenshot of the entire monitor and returns it.
+        :param sct: The mss sct object
+        :return: A Mat of the window.
+        """
+        if self.handle:
+            # Get information of monitor 2
+            mon = sct.monitors[monitor]
+
+            # The screen part to capture
+            box = {
+                "top": mon["top"] + 100,  # 100px from the top
+                "left": mon["left"] + 100,  # 100px from the left
+                "width": mon["width"],
+                "height": mon["height"],
+                "mon": monitor,
+            }
+            shot = sct.grab(box)
+            return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
+

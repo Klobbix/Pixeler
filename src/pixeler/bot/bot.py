@@ -66,6 +66,7 @@ class Bot(ABC):
             self.log(f"Ran for {time.time() - self.start_time} seconds.")
             self.thread.stop()
             self.thread.join()
+            self.window.__destroy()
             self.on_stop()
 
     def log(self, message: str):

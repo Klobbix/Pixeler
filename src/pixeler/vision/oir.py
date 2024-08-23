@@ -40,7 +40,7 @@ def find_template_in_image(image: cv2.Mat, template: cv2.Mat, method=cv2.TM_CCOE
     else:
         best_match_location = max_loc
 
-    return best_match_location, result
+    return best_match_location, max_val
 
 
 def draw_rectangle(image: cv2.Mat, top_left: tuple, height: float, width: float, color: Color,

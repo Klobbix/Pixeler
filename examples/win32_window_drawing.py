@@ -9,7 +9,7 @@ from src.pixeler.input.win32_window import Win32Window
 from src.pixeler.vision.color import GREEN
 
 
-class WindowTracking(Bot):
+class Win32WindowDrawing(Bot):
     def on_start(self):
         self.window.focus()
 
@@ -22,5 +22,5 @@ class WindowTracking(Bot):
 
 
 if __name__ == '__main__':
-    example = WindowTracking(Win32Window.from_title_contains("Notepad"))
+    example = Win32WindowDrawing(Win32Window.from_title_contains("Notepad"))
     example.start()

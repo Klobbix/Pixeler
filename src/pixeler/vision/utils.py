@@ -12,7 +12,7 @@ def load_mat_from_file(path: Path, flags: int = cv2.IMREAD_GRAYSCALE) -> cv2.Mat
     """
     Loads an image from a given path and reads it as a cv Mat.
     :param path: The path to the image file
-    :param flags: Flags to apply to the Mat
+    :param flags: Flags to apply to the Mat. Defaults to GRAYSCALE.
     :return: A cv Mat
     """
     return cv2.imread(str(path), flags)
@@ -27,6 +27,17 @@ def mss_to_cv2(screenshot: ScreenShot) -> cv2.Mat:
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGRA2BGR)
 
 
+def edge_detect(mat: cv2.Mat, threshold1: int = 200, threshold2: int = 300) -> cv2.Mat:
+    """
+    Basic edge detection.
+    :param mat: The mat
+    :param threshold1: The threshold for edge detection
+    :param threshold2: The threshold for edge detection
+    :return:
+    """
+    return cv2.Canny(mat, threshold1, threshold2)
+
+
 def convert(mat: cv2.Mat, code: int) -> cv2.Mat:
     """
     Convert Mat from one color-space type to another
@@ -35,6 +46,15 @@ def convert(mat: cv2.Mat, code: int) -> cv2.Mat:
     :return: A new Mat
     """
     return cv2.cvtColor(mat, code)
+
+
+def convert_to_gray(img: cv2.Mat) -> cv2.Mat:
+    """
+    Converts the Mat to GRAY for CV analysis.
+    :param img: The Mat to convert
+    :return: A cv Mat
+    """
+    return convert(img, cv2.COLOR_BGR2GRAY)
 
 
 def mask_to_color(mat: cv2.Mat, color: Color) -> cv2.Mat:

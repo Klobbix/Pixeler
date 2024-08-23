@@ -5,6 +5,7 @@ __pycache__/
 
 .idea/
 *.iml
+examples/images/*
 
 # C extensions
 *.so
