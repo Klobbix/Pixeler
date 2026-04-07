@@ -1,8 +1,6 @@
 # Pixeler
 [![Publish Python Package](https://github.com/Klobbix/Pixeler/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Klobbix/Pixeler/actions/workflows/python-publish.yml)
 
-> **Work in progress** — core systems are stable; the `GameBot` / module layer is under active development.
-
 A Python framework for building game automation bots that can **see, understand, and interact** with Windows applications in a human-like way.
 
 ---
