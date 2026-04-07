@@ -4,80 +4,51 @@ import cv2
 
 
 class AbstractWindow(ABC):
-    @abstractmethod
-    def focus(self):
-        """
-        Focuses on the instanced window object.
-        """
-        pass
 
     @abstractmethod
-    def maximize(self):
-        """
-        Maximizes the instanced window object.
-        """
-        pass
+    def focus(self) -> None:
+        """Bring the window to the foreground."""
 
     @abstractmethod
-    def minimize(self):
-        """
-        Minimizes the instanced window object.
-        """
-        pass
+    def maximize(self) -> None:
+        """Maximise the window."""
 
     @abstractmethod
-    def move(self, x: int, y: int):
-        """
-        Moves the instanced window object.
-        :param x: The x position of the window.
-        :param y: The y position of the window.
-        """
-        pass
+    def minimize(self) -> None:
+        """Minimise the window."""
 
     @abstractmethod
-    def close(self):
-        """
-        Closes the window.
-        """
-        pass
+    def move(self, x: int, y: int) -> None:
+        """Move the window's top-left corner to (x, y) in screen coordinates."""
 
     @abstractmethod
-    def position(self):
-        """
-        Returns the current top-left position of the window.
-        :return: The position of the window.
-        """
-        pass
+    def close(self) -> None:
+        """Release resources and, where applicable, close the window."""
 
     @abstractmethod
-    def width(self):
-        """
-        Returns the width of the window.
-        :return: The width of the window.
-        """
-        pass
+    def position(self) -> tuple[int, int, int, int]:
+        """Return the window's screen rect as (left, top, right, bottom)."""
 
     @abstractmethod
-    def height(self):
-        """
-        Returns the height of the window.
-        :return: The height of the window.
-        """
-        pass
+    def width(self) -> int:
+        """Return the window width in pixels."""
 
     @abstractmethod
-    def resize(self, width: int, height: int):
-        """
-        Resizes the window to the given width and height.
-        :param width: The width of the window.
-        :param height: The height of the window.
-        """
-        pass
+    def height(self) -> int:
+        """Return the window height in pixels."""
+
+    @abstractmethod
+    def resize(self, width: int, height: int) -> None:
+        """Resize the window to the given dimensions."""
 
     @abstractmethod
     def screenshot(self) -> cv2.Mat:
-        """
-        Takes a screenshot of the window and returns it.
-        :return: A Mat of the window.
-        """
-        pass
+        """Capture and return the window contents as a BGR cv2.Mat."""
+
+    @abstractmethod
+    def is_visible(self) -> bool:
+        """Return True if the window exists and is not minimised."""
+
+    @abstractmethod
+    def title(self) -> str:
+        """Return the current window title string."""

@@ -10,12 +10,29 @@ authors = [
 ]
 description = "An automation framework for python using OpenCV"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies=[
+    "opencv-python==4.13.0.92",
+    "pywinctl==0.4.1",
+    "numpy==2.4.4",
+    "mss==10.1.0",
+    "pytesseract==0.3.13",
+    "pyautogui==0.9.54",
+    "pywin32==311",
+    "cmake==4.3.1"
+]
+
+[project.optional-dependencies]
+train = ["ultralytics>=8.0"]
+
+[project.scripts]
+pixeler-capture = "pixeler.training.cli:capture_main"
+pixeler-train   = "pixeler.training.cli:train_main"
 
 [project.urls]
 Homepage = "https://github.com/klobbix/Pixeler"

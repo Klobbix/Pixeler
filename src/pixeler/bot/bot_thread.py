@@ -1,39 +1,42 @@
-import ctypes
-import platform
 import threading
+import time
+import traceback
 
 
 class BotThread(threading.Thread):
-    def __init__(self, target: callable):
-        threading.Thread.__init__(self)
-        self.target = target
+    """
+    Daemon thread that drives a Bot's step() loop cooperatively.
+
+    Cooperative stopping (via a threading.Event) is used instead of async
+    exception injection, so the thread exits cleanly even when step() is
+    blocked inside a C extension call.
+    """
+
+    def __init__(self, bot):
+        super().__init__(daemon=True)
+        self._bot = bot
+        self._stop_event = threading.Event()
 
     def run(self):
-        id = self.__get_id()
+        from pixeler.bot.bot_status import BotStatus
+        self._bot.log(f"Thread started (id={self.ident})")
         try:
-            print(f"Thread started with id {id}")
-            self.target()
+            while not self._stop_event.is_set():
+                if self._bot.status == BotStatus.PAUSED:
+                    time.sleep(0.05)
+                    continue
+                self._bot.step()
+        except Exception:
+            self._bot.log("Unhandled exception in step():\n" + traceback.format_exc())
+            # Signal stop without joining — we ARE the bot thread, so join() would deadlock
+            self._stop_event.set()
+            self._bot.status = BotStatus.STOPPED
+            if self._bot.window is not None:
+                self._bot.window.close()
+            self._bot.on_stop()
         finally:
-            print(f"Thread {id} stopped")
-
-    def __get_id(self):
-        """Returns id of the respective thread"""
-        if hasattr(self, "_thread_id"):
-            return self._thread_id
-        for id, thread in threading._active.items():
-            if thread is self:
-                return id
+            self._bot.log(f"Thread stopped (id={self.ident})")
 
     def stop(self):
-        """Raises SystemExit exception in the thread. This can be called from the main thread followed by join()."""
-        thread_id = self.__get_id()
-        if platform.system() == "Windows":
-            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(SystemExit))
-            if res > 1:
-                ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
-                print("Exception raise failure")
-        elif platform.system() == "Linux":
-            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
-            if res > 1:
-                ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), 0)
-                print("Exception raise failure")
+        """Signal the loop to exit after the current step() returns."""
+        self._stop_event.set()

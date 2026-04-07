@@ -1,214 +1,119 @@
 """
-Class for targeting Windows OS specific windows.
+Win32-specific window handle using the native HWND.
+
+Prefer this over Window when you need the Overlay, direct GDI drawing onto
+the game window itself, or precise control over Win32 window behaviour.
 """
 
 import cv2
 import numpy as np
-import win32api
 import win32con
 import win32gui
 from mss import mss
 
-from src.pixeler.vision.color import Color
-from src.pixeler.window.abstract_window import AbstractWindow
-from src.pixeler.window.overlay import Overlay
+from pixeler.window.abstract_window import AbstractWindow
 
 
 class Win32Window(AbstractWindow):
+
     def __init__(self, title: str):
-        self.hwnd = self.__from_title(title)
-        self.overlay = None
-        self.hdc = None
-        self.mss = None
-        self.rectangles = {}
-        self.pens = {}
-        self.brushes = {}
+        self.hwnd: int = self._hwnd_from_title(title)
+        self._mss: mss | None = None
 
-    def __from_title(cls, title: str):
-        """
-        Finds a window whose title contains the given substring.
-        :param title: The title to search for.
-        :return: The handle (HWND) of the window if found, None otherwise.
-        """
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        def enum_windows_proc(hwnd, result_list):
-            """Callback function for win32gui.EnumWindows."""
-            window_title = win32gui.GetWindowText(hwnd)
-            if title.lower() in window_title.lower():
-                result_list.append(hwnd)
+    @staticmethod
+    def _hwnd_from_title(title: str) -> int:
+        """Find the first top-level window whose title contains *title*."""
+        found: list[int] = []
 
-        # List to store matching window handles
-        found_windows = []
+        def _callback(hwnd: int, _) -> bool:
+            if title.lower() in win32gui.GetWindowText(hwnd).lower():
+                found.append(hwnd)
+            return True
 
-        # Enumerate all top-level windows and apply the callback function
-        win32gui.EnumWindows(enum_windows_proc, found_windows)
+        win32gui.EnumWindows(_callback, None)
+        if not found:
+            raise ValueError(f"No window found with title containing '{title}'")
+        return found[0]
 
-        if found_windows:
-            print(found_windows)
-            # Return the first matching window handle, or modify to return all
-            return found_windows[0]
-        else:
-            return None
-
-    def create_overlay(self):
-        self.overlay = Overlay(self.hwnd)
-
-    def focus(self):
-        win32gui.SetForegroundWindow(self.hwnd)
-
-    def maximize(self):
-        win32gui.ShowWindow(self.hwnd, win32con.SW_MAXIMIZE)
-
-    def minimize(self):
-        win32gui.ShowWindow(self.hwnd, win32con.SW_MINIMIZE)
-
-    def move(self, x: int, y: int):
-        # Windows 10 has an invisible border of 7 pixels
-        win32gui.MoveWindow(self.hwnd, x - 7, y, self.width(), self.height(), True)
-
-    def close(self):
-        if self.mss:
-            self.mss.close()
-        for pen in self.pens:
-            win32gui.DeleteObject(pen)
-        for brush in self.brushes:
-            win32gui.DeleteObject(brush)
-        win32gui.ReleaseDC(self.hwnd, self.hdc)
-
-    def width(self):
-        """
-        Returns the width of the window.
-        :return: The width of the window.
-        """
-        pos = self.position()
-        return pos[2] - pos[0]
-
-    def height(self):
-        """
-        Returns the height of the window.
-        :return: The height of the window.
-        """
-        pos = self.position()
-        return pos[3] - pos[1]
-
-    def position(self) -> (int, int, int, int):
-        return win32gui.GetWindowRect(self.hwnd)
-
-    def resize(self, width: int, height: int):
-        pos = self.position()
-        win32gui.MoveWindow(self.hwnd, pos[0] - 7, pos[1], width, height, True)
-
-    def get_hdc(self):
-        """ Get the device context of the currently active (foreground) window """
-        if self.hdc is None:
-            self.hdc = win32gui.GetDC(self.hwnd)
-        return self.hdc
-
-    def screenshot(self) -> cv2.Mat:
-        """
-        Takes a screenshot of the window and returns it.
-        :param sct: The mss sct object
-        :return: A Mat of the window.
-        """
-        # Get the window's client rectangle (excluding title bar and borders)
-        if self.mss is None:
-            self.mss = mss()
-        pos = self.position()
-
-        # Define the box for capturing
+    def _mss_grab(self) -> cv2.Mat:
+        if self._mss is None:
+            self._mss = mss()
+        left, top, right, bottom = self.position()
         box = {
-            'top': pos[1],
-            'left': pos[0],
-            'width': self.width(),
-            'height': self.height()
+            'top': top,
+            'left': left,
+            'width': right - left,
+            'height': bottom - top,
         }
-
-        # Capture the screenshot of the defined box
-        shot = self.mss.grab(box)
-
-        # Convert the screenshot to a format usable by OpenCV
+        shot = self._mss.grab(box)
         return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
 
-    def get_cached_pen(self, color: Color):
-        color_tuple = (color.lower[0], color.lower[1], color.lower[2])
-        if color_tuple not in self.pens:
-            pen = win32gui.CreatePen(win32con.PS_SOLID, 1, win32api.RGB(*color_tuple))
-            self.pens[color_tuple] = pen
-        return self.pens[color_tuple]
+    # ------------------------------------------------------------------
+    # AbstractWindow implementation
+    # ------------------------------------------------------------------
 
-    def get_cached_brush(self, color: Color):
-        color_tuple = (color.lower[0], color.lower[1], color.lower[2])
-        if color_tuple not in self.brushes:
-            brush = win32gui.CreateSolidBrush(win32api.RGB(*color_tuple))
-            self.brushes[color_tuple] = brush
-        return self.brushes[color_tuple]
+    def focus(self) -> None:
+        win32gui.SetForegroundWindow(self.hwnd)
 
-    def draw_text(self, text: str, color: Color, x: int, y: int, flags: int = 0):
-        pos = win32gui.GetClientRect(self.hwnd)
-        adjusted = (pos[0] + x, pos[1] + y, pos[2], pos[3])
+    def maximize(self) -> None:
+        win32gui.ShowWindow(self.hwnd, win32con.SW_MAXIMIZE)
 
-        hdc = self.get_hdc()
-        # Set the text color (using RGB values)
-        win32gui.SetTextColor(hdc, win32api.RGB(color.lower[0], color.lower[1], color.lower[2]))
+    def minimize(self) -> None:
+        win32gui.ShowWindow(self.hwnd, win32con.SW_MINIMIZE)
 
-        # Set the background mode to transparent
-        win32gui.SetBkMode(hdc, win32con.TRANSPARENT)
+    def move(self, x: int, y: int) -> None:
+        win32gui.MoveWindow(self.hwnd, x, y, self.width(), self.height(), True)
 
-        # Draw the text at the specified position
-        win32gui.DrawText(hdc, text, -1, adjusted, flags)
+    def close(self) -> None:
+        if self._mss is not None:
+            self._mss.close()
+            self._mss = None
 
-    def draw_rectangle(self, top_left: tuple, bottom_right: tuple, color: Color):
-        if len(top_left) != 2 and len(bottom_right) != 2:
-            raise ValueError("Coordinates must be of length 2 (X, Y).")
+    def position(self) -> tuple[int, int, int, int]:
+        return win32gui.GetWindowRect(self.hwnd)
 
-        key = (top_left, bottom_right, color)
-        if key in self.rectangles:
-            return
+    def width(self) -> int:
+        l, t, r, b = self.position()
+        return r - l
 
-        self.rectangles[key] = True
-        hdc = self.get_hdc()
-        pen = self.get_cached_pen(color)
-        brush = self.get_cached_brush(color)
+    def height(self) -> int:
+        l, t, r, b = self.position()
+        return b - t
 
-        win32gui.SelectObject(hdc, pen)
-        win32gui.SelectObject(hdc, brush)
+    def resize(self, width: int, height: int) -> None:
+        l, t, _, _ = self.position()
+        win32gui.MoveWindow(self.hwnd, l, t, width, height, True)
 
-        win32gui.Rectangle(hdc, top_left[0], top_left[1], bottom_right[0], bottom_right[1])
+    def is_visible(self) -> bool:
+        return (win32gui.IsWindowVisible(self.hwnd)
+                and not win32gui.IsIconic(self.hwnd))
 
-    def draw_rectangle_outline(self, top_left: tuple, bottom_right: tuple, color: Color):
-        if len(top_left) != 2 and len(bottom_right) != 2:
-            raise ValueError("Coordinates must be of length 2 (X, Y).")
+    def title(self) -> str:
+        return win32gui.GetWindowText(self.hwnd)
 
-        key = (top_left, bottom_right, color)
-        if key in self.rectangles:
-            return
+    def screenshot(self) -> cv2.Mat:
+        if not self.is_visible():
+            raise RuntimeError(
+                f"Cannot screenshot window '{self.title()}' — it is minimised or hidden"
+            )
+        return self._mss_grab()
 
-        self.rectangles[key] = True
-        hdc = self.get_hdc()
-        pen = self.get_cached_pen(color)
-        null_brush = win32gui.GetStockObject(win32con.NULL_BRUSH)
+    # ------------------------------------------------------------------
+    # Overlay factory
+    # ------------------------------------------------------------------
 
-        win32gui.SelectObject(hdc, pen)
-        win32gui.SelectObject(hdc, null_brush)
+    def create_overlay(self) -> 'Overlay':
+        """
+        Create and start a transparent overlay window over this window.
 
-        # Draw the rectangle outline on the device context
-        win32gui.Rectangle(hdc, top_left[0], top_left[1], bottom_right[0], bottom_right[1])
-
-        # Clean up resources
-        win32gui.DeleteObject(null_brush)
-
-    def clear_screen(self):
-        win32gui.InvalidateRect(self.hwnd, None, True)
-        win32gui.UpdateWindow(self.hwnd)
-
-    def clear_area(self, top_left: tuple, bottom_right: tuple):
-        win32gui.InvalidateRect(self.hwnd, (top_left[0], top_left[1], bottom_right[0], bottom_right[1]), True)
-        win32gui.UpdateWindow(self.hwnd)
-
-    def clear_drawn_cache(self):
-        self.rectangles.clear()
-
-    def redraw_rectangles(self):
-        for rect_key in self.rectangles:
-            top_left, bottom_right, color = rect_key
-            self.draw_rectangle(top_left, bottom_right, Color(*color))
+        Returns a ready-to-use Overlay instance. Call begin_frame() /
+        drawing methods / end_frame() in your bot's step() loop.
+        """
+        from pixeler.window.overlay import Overlay
+        overlay = Overlay(self.hwnd)
+        overlay.start()
+        return overlay

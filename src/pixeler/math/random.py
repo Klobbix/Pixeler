@@ -1,198 +1,237 @@
+"""
+Randomness utilities tuned for human-like game bot behaviour.
+
+Distributions are chosen to match empirical measurements of human timing and
+spatial targeting rather than uniform or simple Gaussian models.
+"""
+
 import math
 import random
 import secrets
+import time
 from datetime import datetime
 from typing import List, Union
 
 import numpy as np
 
 
-def random_seeds(mod: int = 0, start: int = 8, stop: int = 12):
+# ---------------------------------------------------------------------------
+# Seeds / reproducibility
+# ---------------------------------------------------------------------------
+
+def random_seeds(mod: int = 0, start: int = 8, stop: int = 12) -> List[List[float]]:
     """
-    Generates a set of random seeds.
-    Args:
-        mod: The modifier to add to a numeric representation of the current date.
-                Default is 0. E.g., if the date is 2022-01-01, and the mod is 5, the
-                random seeds will be based on random.seed(20220106).
-        start: The minimum number of seeds to generate. Default is 8.
-        stop: The maximum number of seeds to generate. Default is 12.
-    Returns:
-        A list of random seeds.
+    Generate a set of daily-stable random seeds.
+
+    The seeds are deterministic within a calendar day (useful for session-
+    consistent click patterns) but differ between days, preventing trivial
+    temporal fingerprinting.
+
+    :param mod:   Offset added to today's date integer before seeding.
+    :param start: Minimum number of seeds.
+    :param stop:  Maximum number of seeds.
     """
     sg = secrets.SystemRandom()
     date = int(datetime.now().strftime("%Y%m%d"))
     random.seed(date + mod)
-    return [[random.uniform(0.000, 1.000), random.uniform(0.000, 1.000)] for _ in range(sg.randrange(start, stop))]
+    count = sg.randrange(start, stop)
+    return [[random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)]
+            for _ in range(count)]
 
 
-def random_point_in(x_min, y_min, width, height, seeds: List[List[int]]) -> List[int]:
+# ---------------------------------------------------------------------------
+# Spatial sampling
+# ---------------------------------------------------------------------------
+
+def random_point_in(x_min: float, y_min: float,
+                    width: float, height: float,
+                    seeds: List[List[float]]) -> List[int]:
     """
-    Returns a random pixel within some bounding box based on a list of seeds.
-    Args:
-        x_min: The left-most coordinate of the bounding box.
-        y_min: The top-most coordinate of the bounding box.
-        width: The width of the bounding box.
-        height: The height of the bounding box.
-        seeds: A list of seeds to use for the randomization.
-    Returns:
-        A random [x, y] coordinate within the bounding box.
+    Return a random [x, y] inside a bounding box, biased toward the centre
+    using the supplied seeds. Resembles how humans click UI elements (rarely
+    the very edge, usually somewhere central).
     """
     sg = secrets.SystemRandom()
 
     if sg.randrange(0, 101) > 75:
-        # Generate a random pixel within the full bounding box.
-        return __random_from(x_min, y_min, width, height)
+        return _random_from(x_min, y_min, width, height)
 
-    # Calculate the dimensions and position of an inner bounding box within the full bounding box.
-    offset_percentage = sg.uniform(0.150, 0.350)
-    inner_x_min = round(width * offset_percentage + x_min)
-    inner_y_min = round(height * offset_percentage + y_min)
-    inner_width = round(width * (1.000 - (offset_percentage * 2)))
-    inner_height = round(height * (1.000 - (offset_percentage * 2)))
+    offset_pct = sg.uniform(0.15, 0.35)
+    inner_x = round(width * offset_pct + x_min)
+    inner_y = round(height * offset_pct + y_min)
+    inner_w = round(width * (1.0 - offset_pct * 2))
+    inner_h = round(height * (1.0 - offset_pct * 2))
 
-    # Select a random seed from the list of seeds.
-    random_index = sg.randrange(0, len(seeds))
-    ratio_x = round(inner_width * seeds[random_index][0])
-    ratio_y = round(inner_height * seeds[random_index][1])
+    idx = sg.randrange(0, len(seeds))
+    ratio_x = round(inner_w * seeds[idx][0])
+    ratio_y = round(inner_h * seeds[idx][1])
 
-    # Calculate the dimensions and position of a bounding box within the inner bounding box.
-    start_x, start_y = inner_x_min + ratio_x, inner_y_min + ratio_y
-    start_fix_width, end_fix_width = start_x - x_min, width - ratio_x
-    start_fix_height, end_fix_height = start_y - y_min, height - ratio_y
+    start_x = inner_x + ratio_x
+    start_y = inner_y + ratio_y
+    fix_w = start_x - x_min
+    fix_h = start_y - y_min
+    end_w = width - ratio_x
+    end_h = height - ratio_y
 
-    # Determine the dimensions of the bounding box within the inner bounding box.
-    inner_inner_width = start_fix_width if start_fix_width <= end_fix_width else end_fix_width
-    inner_inner_height = start_fix_height if start_fix_height <= end_fix_height else end_fix_height
+    cell_w = fix_w if fix_w <= end_w else end_w
+    cell_h = fix_h if fix_h <= end_h else end_h
 
-    # Generate a random pixel within the bounding box within the inner bounding box.
-    return __random_from(start_x, start_y, inner_inner_width, inner_inner_height, centered=False)
+    return _random_from(start_x, start_y, cell_w, cell_h, centered=False)
 
 
-def __random_from(x_min, y_min, width, height, centered: bool = True) -> List[int]:
+def gaussian_jitter(x: float, y: float, sigma: float = 2.0) -> tuple[float, float]:
     """
-    Helper function to generate a random pixel within some bounding box. The bounding box can be
-    centered on the x_min and y_min coordinates, or the bounding box can be offset from the x_min
-    and y_min coordinates (i.e., x_min and y_min are the top-left corner of the bounding
-    box).
-    Args:
-        x_min: The left-most coordinate of the bounding box.
-        y_min: The top-most coordinate of the bounding box.
-        width: The width of the bounding box.
-        height: The height of the bounding box.
-        centered: Whether or not the bounding box is centered on the x_min and y_min coordinates.
+    Add independent Gaussian noise to a coordinate pair.
+
+    Useful for adding sub-pixel variation to a computed target position so
+    repeated clicks on the same logical target land at slightly different pixels.
+
+    :param sigma: Standard deviation in pixels.
     """
+    return (x + np.random.normal(0.0, sigma),
+            y + np.random.normal(0.0, sigma))
+
+
+def _random_from(x_min: float, y_min: float,
+                 width: float, height: float,
+                 centered: bool = True) -> List[int]:
     if centered:
-        # The bounding box to search is to be centered on the x_min and y_min coordinates
         x_min = x_min + math.ceil(width / 2)
         y_min = y_min + math.ceil(height / 2)
 
-    # Calculate the minimum and maximum values for x and y within the region
-    x_min_bound = x_min - math.ceil(width / 2)
-    x_max_bound = x_min + math.ceil(width / 2)
-    y_min_bound = y_min - math.ceil(height / 2)
-    y_max_bound = y_min + math.ceil(height / 2)
+    x_lo = x_min - math.ceil(width / 2)
+    x_hi = x_min + math.ceil(width / 2)
+    y_lo = y_min - math.ceil(height / 2)
+    y_hi = y_min + math.ceil(height / 2)
 
-    # Calculate the standard deviation for x and y based on the region's dimensions
     sigma_x = (width / 2) * 0.33
     sigma_y = (height / 2) * 0.33
 
-    # Generate a random x and y value within the region using truncated normal sampling
-    x = int(truncated_normal_sample(x_min_bound, x_max_bound, x_min, sigma_x))
-    y = int(truncated_normal_sample(y_min_bound, y_max_bound, y_min, sigma_y))
+    x = int(truncated_normal_sample(x_lo, x_hi, x_min, sigma_x))
+    y = int(truncated_normal_sample(y_lo, y_hi, y_min, sigma_y))
     return [x, y]
 
 
-def truncated_normal_sample(lower_bound, upper_bound, mean=None, std=None) -> float:
+# ---------------------------------------------------------------------------
+# Timing distributions
+# ---------------------------------------------------------------------------
+
+def reaction_delay(mean_ms: float = 250.0,
+                   min_ms: float = 120.0,
+                   max_ms: float = 500.0) -> float:
     """
-    Generate a random sample from a normal distribution using the Box-Muller method.
-    Args:
-        lower_bound: The lower bound of the truncated normal distribution.
-        upper_bound: The upper bound of the truncated normal distribution.
-        mean: The mean of the normal distribution (default is mid-point between bounds).
-        std: The standard deviation of the normal distribution (default is auto-generated).
-    Returns:
-        A random float from the truncated normal distribution.
-    Examples:
-        100,000 x `truncated_normal_sample(0, 100)` graphed: https://i.imgur.com/8W12RZX.png
+    Sample a human-like visual reaction time in **seconds**.
+
+    Modelled as ex-Gaussian (normal + exponential tail), which matches
+    empirical measurements of human RT distributions. The exponential tail
+    accounts for occasional attentional lapses.
+
+    :param mean_ms: Target mean reaction time in milliseconds.
+    :param min_ms:  Hard lower bound (fastest possible reaction).
+    :param max_ms:  Hard upper bound (slowest considered reactive).
+    """
+    normal_part = truncated_normal_sample(min_ms, mean_ms * 1.3,
+                                          mean=mean_ms, std=45.0)
+    exp_tail = np.random.exponential(28.0)  # ~28 ms scale for attentional noise
+    ms = min(max_ms, normal_part + exp_tail)
+    return ms / 1000.0
+
+
+def idle_delay(min_s: float = 0.5, max_s: float = 3.0) -> float:
+    """
+    Sample a longer pause between bot actions, drawn from a chi-squared
+    distribution (right-skewed — short pauses are most common, with a tail
+    toward longer breaks matching human browsing/gaming behaviour).
+
+    :returns: Delay duration in seconds.
+    """
+    mean_ms = (min_s + max_s) / 2 * 1000
+    ms = chisquared_sample(df=int(mean_ms), min=min_s * 1000, max=max_s * 1000)
+    return ms / 1000.0
+
+
+def random_sleep(min_s: float, max_s: float):
+    """Block for a uniformly random duration between *min_s* and *max_s* seconds."""
+    time.sleep(random.uniform(min_s, max_s))
+
+
+def exponential_sample(mean: float, min_val: float = 0.0,
+                        max_val: float = float('inf')) -> float:
+    """
+    Sample from an exponential distribution with the given mean, clamped to
+    [min_val, max_val].  Useful for inter-event timing (skill cooldowns,
+    action cadence) where most events cluster near zero but rare long gaps occur.
+    """
+    while True:
+        x = np.random.exponential(mean)
+        if min_val <= x <= max_val:
+            return x
+
+
+# ---------------------------------------------------------------------------
+# Core distribution primitives
+# ---------------------------------------------------------------------------
+
+def truncated_normal_sample(lower_bound: float, upper_bound: float,
+                             mean: float = None, std: float = None) -> float:
+    """
+    Sample from a truncated normal distribution using the Box-Muller transform.
+
+    :param lower_bound: Minimum returnable value.
+    :param upper_bound: Maximum returnable value.
+    :param mean: Distribution centre (default: midpoint of bounds).
+    :param std:  Standard deviation (default: range / 9).
     """
     if mean is None:
         mean = (lower_bound + upper_bound) / 2
     if std is None:
         std = (upper_bound - lower_bound) / 9
-    # Keep generating samples until we get one that falls within the specified bounds
     while True:
-        # Generate two independent standard normal samples
         x1, x2 = np.random.normal(0, 1), np.random.normal(0, 1)
-        z = x1**2 + x2**2
-        if z >= 0 and z <= 1:
-            # Use the Box-Muller transform to generate a sample from the normal distribution
-            sample = mean + std * x1 * np.sqrt(-2 * np.log(z) / z)
-            if sample < lower_bound:
-                continue
-            if sample > upper_bound:
-                continue
-            return sample
+        z = x1 ** 2 + x2 ** 2
+        if 0 < z <= 1:
+            sample = mean + std * x1 * np.sqrt(-2 * math.log(z) / z)
+            if lower_bound <= sample <= upper_bound:
+                return sample
 
 
-def fancy_normal_sample(lower_bound, upper_bound) -> float:
+def fancy_normal_sample(lower_bound: float, upper_bound: float) -> float:
     """
-    Generate a random sample from a truncated normal distribution with randomly-selected means.
-    This produces a more "fancy" distribution than a standard normal distribution, which could emulate
-    randomness in human gameplay activity. This function is a work in progress.
-    Args:
-        lower_bound: The lower bound of the truncated normal distribution.
-        upper_bound: The upper bound of the truncated normal distribution.
-    Returns:
-        A random float from a truncated normal distribution with randomly-selected means.
-    Examples:
-        100,000 x `truncated_normal_sample(0, 100)` graphed: https://i.imgur.com/XP4Loff.png
+    Sample from a bimodal truncated normal with randomly-selected means,
+    producing the kind of multi-modal timing patterns seen in human gameplay
+    (e.g., fast reaction followed by a slower deliberate action).
     """
-    # Default will be two means, one at 1/3rd and one at 2/3 of the range
-    means = [lower_bound + (upper_bound - lower_bound) * 0.33, lower_bound + (upper_bound - lower_bound) * 0.66]
-    # Generate probabilities for each mean proportional to the index
-    p = [(i + 1) ** 2 / sum((i + 1) ** 2 for i in range(len(means))) for i in range(len(means))][::-1]
-    # Select a mean from the list with a probability proportional to the index
-    index = np.random.choice(range(len(means)), p=p)
-    mean = means[index]
-    # Retrieve a sample from the truncated normal distribution
+    means = [
+        lower_bound + (upper_bound - lower_bound) * 0.33,
+        lower_bound + (upper_bound - lower_bound) * 0.66,
+    ]
+    p = [(i + 1) ** 2 / sum((j + 1) ** 2 for j in range(len(means)))
+         for i in range(len(means))][::-1]
+    mean = means[np.random.choice(range(len(means)), p=p)]
     return truncated_normal_sample(lower_bound, upper_bound, mean=mean)
 
 
-def chisquared_sample(df: int, min: float = 0, max: float = np.inf) -> float:
+def chisquared_sample(df: int,
+                       min: float = 0.0,
+                       max: float = float('inf')) -> float:
     """
-    Generate a random sample from a Chisquared distribution. Contraining the maximum will produce abnormal means.
-    Args:
-        df: Degrees of freedom (approximately the average result).
-        min: Minimum allowable output (default is 0)
-        max: Maximum allowable output (default is infinity).
-    Returns:
-        A random float from a Chisquared distribution.
-    Examples:
-        For 100,000 samples of chisquared_sample(average = 25, min = 3):
-        - Average = 24.98367264407156
-        - Maximum = 67.39469215530804
-        - Minimum = 3.636904524316633
-        - Graphed: https://i.imgur.com/9re2ezf.png
+    Sample from a chi-squared distribution with *df* degrees of freedom
+    (approximately the distribution mean), clamped to [min, max].
     """
-    if max is None:
-        max = np.inf
     while True:
         x = np.random.chisquare(df)
-        if x >= min and x <= max:
+        if min <= x <= max:
             return x
 
 
 def random_chance(probability: float) -> bool:
     """
-    Returns true or false based on a probability.
-    Args:
-        probability: The probability of returning true (between 0 and 1).
-    Returns:
-        True or false.
+    Return True with the given probability.
+
+    :param probability: Float in [0.0, 1.0].
     """
-    # ensure probability is between 0 and 1
-    if not isinstance(probability, float):
-        raise TypeError("Probability must be a float")
-    if probability < 0.000 or probability > 1.000:
-        raise ValueError("Probability must be between 0 and 1")
+    if not isinstance(probability, (int, float)):
+        raise TypeError("probability must be a float")
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError("probability must be between 0 and 1")
     return secrets.SystemRandom().random() < probability
