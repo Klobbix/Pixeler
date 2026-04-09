@@ -21,9 +21,11 @@ Usage::
 
 Coordinate system
 -----------------
-All drawing coordinates are **relative to the game window's top-left corner**
-(client space), which aligns naturally with pixel positions returned by
-Window.screenshot() and the vision module.
+All drawing coordinates are **relative to the game window's client area top-left**,
+which aligns with pixel positions returned by Win32Window.screenshot() and the
+vision module.  Both the screenshot and the overlay use ClientToScreen +
+GetClientRect so that title-bar height, window borders, and the invisible DWM
+resize frame are all excluded from the coordinate space.
 """
 
 import ctypes
@@ -113,14 +115,15 @@ class Overlay:
         except OSError:
             pass  # Already registered from a previous run in the same process
 
-        l, t, r, b = win32gui.GetWindowRect(self.parent_hwnd)
+        x, y = win32gui.ClientToScreen(self.parent_hwnd, (0, 0))
+        _, _, w, h = win32gui.GetClientRect(self.parent_hwnd)
 
         self.hwnd = win32gui.CreateWindowEx(
             win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_TOPMOST,
             self._CLASS_NAME,
             "PixelerOverlay",
             win32con.WS_POPUP,
-            l, t, r - l, b - t,
+            x, y, w, h,
             self.parent_hwnd, None, wc.hInstance, None,
         )
 
@@ -211,14 +214,15 @@ class Overlay:
             win32gui.UpdateWindow(self.hwnd)
 
     def sync_to_parent(self) -> None:
-        """Reposition and resize the overlay to exactly cover the parent window."""
+        """Reposition and resize the overlay to exactly cover the parent window's client area."""
         if not self.hwnd:
             return
-        l, t, r, b = win32gui.GetWindowRect(self.parent_hwnd)
+        x, y = win32gui.ClientToScreen(self.parent_hwnd, (0, 0))
+        _, _, w, h = win32gui.GetClientRect(self.parent_hwnd)
         win32gui.SetWindowPos(
             self.hwnd,
             win32con.HWND_TOPMOST,
-            l, t, r - l, b - t,
+            x, y, w, h,
             win32con.SWP_NOACTIVATE,
         )
 

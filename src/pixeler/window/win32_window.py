@@ -57,13 +57,9 @@ class Win32Window(AbstractWindow):
     def _mss_grab(self) -> cv2.Mat:
         if self._mss is None:
             self._mss = mss()
-        left, top, right, bottom = self.position()
-        box = {
-            'top': top,
-            'left': left,
-            'width': right - left,
-            'height': bottom - top,
-        }
+        x, y = win32gui.ClientToScreen(self.hwnd, (0, 0))
+        _, _, w, h = win32gui.GetClientRect(self.hwnd)
+        box = {'top': y, 'left': x, 'width': w, 'height': h}
         shot = self._mss.grab(box)
         return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
 
