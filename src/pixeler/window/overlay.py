@@ -189,6 +189,16 @@ class Overlay:
     # Frame lifecycle
     # ------------------------------------------------------------------
 
+    def clear(self) -> None:
+        """Erase all drawn content from the overlay."""
+        if not self.hwnd:
+            return
+        hdc = self._get_hdc()
+        client = win32gui.GetClientRect(self.hwnd)
+        black_brush = win32gui.GetStockObject(win32con.BLACK_BRUSH)
+        win32gui.FillRect(hdc, client, black_brush)
+        # BLACK_BRUSH is a stock object — do not DeleteObject it
+
     def begin_frame(self) -> None:
         """
         Start a new frame: sync the overlay position to the parent window
@@ -197,11 +207,7 @@ class Overlay:
         Call this at the start of every bot step() before any drawing.
         """
         self.sync_to_parent()
-        hdc = self._get_hdc()
-        client = win32gui.GetClientRect(self.hwnd)
-        black_brush = win32gui.GetStockObject(win32con.BLACK_BRUSH)
-        win32gui.FillRect(hdc, client, black_brush)
-        # BLACK_BRUSH is a stock object — do not DeleteObject it
+        self.clear()
 
     def end_frame(self) -> None:
         """

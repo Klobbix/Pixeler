@@ -76,6 +76,7 @@ from pixeler.vision.color import ColorFilter
 from pixeler.vision.detection import (
     find_color_regions,
     find_template,
+    find_template_multiscale,
     load_template,
 )
 from pixeler.vision.ocr import read_number, read_text, read_words
@@ -102,8 +103,11 @@ class _Entry:
     throttle_s: float
     enabled: bool
     # kind-specific config
-    threshold: float = 0.8   # template: min confidence
-    numeric: bool = False    # ocr: also run read_number()
+    threshold: float = 0.8              # template: min confidence
+    scale: float = 1.0                  # template: manual scale factor
+    scale_range: Optional[tuple[float, float]] = None  # template: auto multi-scale range (min, max)
+    scale_steps: int = 20               # template: steps for multi-scale search
+    numeric: bool = False               # ocr: also run read_number()
     # throttle state (monotonic seconds; 0.0 → always fires on first call)
     last_emit: float = field(default=0.0)
 
@@ -197,6 +201,9 @@ class ScreenAnalyzer:
         template_path: Path | str,
         threshold: float = 0.8,
         throttle_s: float = 0.0,
+        scale: float = 1.0,
+        scale_range: tuple[float, float] | None = None,
+        scale_steps: int = 20,
     ) -> None:
         """
         Register a template matcher.
@@ -209,10 +216,26 @@ class ScreenAnalyzer:
         :param template_path:  Path to the reference image file.
         :param threshold:      Minimum ``TM_CCOEFF_NORMED`` confidence [0–1].
         :param throttle_s:     Minimum seconds between detector runs.
+        :param scale:          Resize the template by this factor before each
+                               match.  Use when the game window is larger or
+                               smaller than when the template was captured
+                               (e.g. ``scale=1.25`` for 125 % DPI).
+                               Ignored when *scale_range* is set.
+        :param scale_range:    ``(min_scale, max_scale)`` tuple to enable
+                               automatic multi-scale search.  The detector
+                               tries *scale_steps* evenly-spaced scales and
+                               returns the best match above *threshold*.
+                               Slower than a fixed scale but requires no prior
+                               knowledge of the DPI or window size.
+        :param scale_steps:    Number of scale steps for the multi-scale search
+                               (default: 20).
         """
         template_mat = load_template(template_path)
         entry = self._add(DetectorKind.TEMPLATE, name, template_mat, throttle_s)
         entry.threshold = threshold
+        entry.scale = scale
+        entry.scale_range = scale_range
+        entry.scale_steps = scale_steps
 
     def add_ocr(
         self,
@@ -382,7 +405,19 @@ class ScreenAnalyzer:
 
     def _run_template(self, entry: _Entry, screenshot: cv2.Mat) -> List[Event]:
         template_mat: cv2.Mat = entry.obj
-        match = find_template(screenshot, template_mat, threshold=entry.threshold)
+        if entry.scale_range is not None:
+            match = find_template_multiscale(
+                screenshot, template_mat,
+                threshold=entry.threshold,
+                scale_range=entry.scale_range,
+                scale_steps=entry.scale_steps,
+            )
+        else:
+            match = find_template(
+                screenshot, template_mat,
+                threshold=entry.threshold,
+                scale=entry.scale,
+            )
         if match is None:
             return []
 

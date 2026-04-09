@@ -149,7 +149,8 @@ def color_percentage(image: cv2.Mat, color_filter: ColorFilter) -> float:
 def find_template(image: cv2.Mat,
                   template: cv2.Mat,
                   method: int = cv2.TM_CCOEFF_NORMED,
-                  threshold: float = 0.8) -> TemplateMatch | None:
+                  threshold: float = 0.8,
+                  scale: float = 1.0) -> TemplateMatch | None:
     """
     Find the best match of *template* inside *image*.
 
@@ -157,8 +158,17 @@ def find_template(image: cv2.Mat,
     :param template:  BGR reference image to look for.
     :param method:    OpenCV matching method (default: TM_CCOEFF_NORMED).
     :param threshold: Minimum confidence [0–1] to accept a match.
+    :param scale:     Resize the template by this factor before matching.
+                      Use to compensate for DPI scaling or window resizing.
+                      1.0 = no scaling (default).
     :returns: TemplateMatch if found above threshold, else None.
     """
+    if scale != 1.0:
+        h, w = template.shape[:2]
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        template = cv2.resize(template, (new_w, new_h))
+
     h, w = template.shape[:2]
     result = cv2.matchTemplate(image, template, method)
 
@@ -180,6 +190,39 @@ def find_template(image: cv2.Mat,
         template_w=w,
         template_h=h,
     )
+
+
+def find_template_multiscale(
+    image: cv2.Mat,
+    template: cv2.Mat,
+    method: int = cv2.TM_CCOEFF_NORMED,
+    threshold: float = 0.8,
+    scale_range: tuple[float, float] = (0.5, 2.0),
+    scale_steps: int = 20,
+) -> TemplateMatch | None:
+    """
+    Find *template* inside *image* by trying a range of scale factors and
+    returning the best match above *threshold*.
+
+    Useful when the game window may be at a different size than when the
+    template was captured (e.g. DPI scaling, window resize).
+
+    :param image:       BGR screenshot to search within.
+    :param template:    BGR reference image to look for.
+    :param method:      OpenCV matching method (default: TM_CCOEFF_NORMED).
+    :param threshold:   Minimum confidence [0–1] to accept a match.
+    :param scale_range: ``(min_scale, max_scale)`` range to search.
+    :param scale_steps: Number of evenly-spaced scales to try within the range.
+    :returns: Best TemplateMatch found above threshold, else None.
+    """
+    best: TemplateMatch | None = None
+    for s in np.linspace(scale_range[0], scale_range[1], int(scale_steps)):
+        match = find_template(image, template, method=method, threshold=0.0, scale=float(s))
+        if match is not None and (best is None or match.confidence > best.confidence):
+            best = match
+    if best is None or best.confidence < threshold:
+        return None
+    return best
 
 
 def find_all_templates(image: cv2.Mat,
