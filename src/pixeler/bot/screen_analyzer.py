@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -84,11 +85,19 @@ from pixeler.vision.ocr import read_number, read_text, read_words
 # Internal entry type
 # ---------------------------------------------------------------------------
 
+class DetectorKind(Enum):
+    YOLO     = "yolo"
+    ORB      = "orb"
+    COLOR    = "color"
+    TEMPLATE = "template"
+    OCR      = "ocr"
+
+
 @dataclass
 class _Entry:
     """Internal descriptor for one registered detector."""
     name: str
-    kind: str       # "yolo" | "orb" | "color" | "template" | "ocr"
+    kind: DetectorKind
     obj: Any        # the detector object (see kind-specific notes below)
     throttle_s: float
     enabled: bool
@@ -145,7 +154,7 @@ class ScreenAnalyzer:
         :param throttle_s:  Minimum seconds between detector runs.  YOLO is
                             expensive — 0.05–0.1 s is a good starting point.
         """
-        self._add("yolo", name, classifier, throttle_s)
+        self._add(DetectorKind.YOLO, name, classifier, throttle_s)
 
     def add_orb(
         self,
@@ -162,7 +171,7 @@ class ScreenAnalyzer:
         :param matcher:   A ready ``ORBMatcher`` (reference already loaded).
         :param throttle_s: Minimum seconds between detector runs.
         """
-        self._add("orb", name, matcher, throttle_s)
+        self._add(DetectorKind.ORB, name, matcher, throttle_s)
 
     def add_color(
         self,
@@ -180,7 +189,7 @@ class ScreenAnalyzer:
         :param color_filter: An ``ColorFilter`` instance (HSV range).
         :param throttle_s:   Minimum seconds between detector runs.
         """
-        self._add("color", name, color_filter, throttle_s)
+        self._add(DetectorKind.COLOR, name, color_filter, throttle_s)
 
     def add_template(
         self,
@@ -202,7 +211,7 @@ class ScreenAnalyzer:
         :param throttle_s:     Minimum seconds between detector runs.
         """
         template_mat = load_template(template_path)
-        entry = self._add("template", name, template_mat, throttle_s)
+        entry = self._add(DetectorKind.TEMPLATE, name, template_mat, throttle_s)
         entry.threshold = threshold
 
     def add_ocr(
@@ -229,7 +238,7 @@ class ScreenAnalyzer:
         :param numeric:   If True, also attempt ``read_number()`` and populate
                           ``OCRPayload.number``.
         """
-        entry = self._add("ocr", name, region, throttle_s)
+        entry = self._add(DetectorKind.OCR, name, region, throttle_s)
         entry.numeric = numeric
 
     # ------------------------------------------------------------------
@@ -299,15 +308,15 @@ class ScreenAnalyzer:
     # ------------------------------------------------------------------
 
     def _run_entry(self, entry: _Entry, screenshot: cv2.Mat) -> List[Event]:
-        if entry.kind == "yolo":
+        if entry.kind == DetectorKind.YOLO:
             return self._run_yolo(entry, screenshot)
-        if entry.kind == "orb":
+        if entry.kind == DetectorKind.ORB:
             return self._run_orb(entry, screenshot)
-        if entry.kind == "color":
+        if entry.kind == DetectorKind.COLOR:
             return self._run_color(entry, screenshot)
-        if entry.kind == "template":
+        if entry.kind == DetectorKind.TEMPLATE:
             return self._run_template(entry, screenshot)
-        if entry.kind == "ocr":
+        if entry.kind == DetectorKind.OCR:
             return self._run_ocr(entry, screenshot)
         return []
 
@@ -409,7 +418,7 @@ class ScreenAnalyzer:
 
     def _add(
         self,
-        kind: str,
+        kind: DetectorKind,
         name: str,
         obj: Any,
         throttle_s: float,
@@ -431,7 +440,7 @@ class ScreenAnalyzer:
         return None
 
     def __repr__(self) -> str:
-        summary = ", ".join(f"{e.name}({e.kind})" for e in self._entries)
+        summary = ", ".join(f"{e.name}({e.kind.value})" for e in self._entries)
         return f"ScreenAnalyzer([{summary}])"
 
 
