@@ -5,6 +5,8 @@ Prefer this over Window when you need the Overlay, direct GDI drawing onto
 the game window itself, or precise control over Win32 window behaviour.
 """
 
+import ctypes as _ctypes
+
 import cv2
 import numpy as np
 import win32con
@@ -12,6 +14,19 @@ import win32gui
 from mss import mss
 
 from pixeler.window.abstract_window import AbstractWindow
+
+# Make the process per-monitor DPI aware so that GetWindowRect, GDI drawing,
+# and MSS screen capture all operate in the same physical-pixel coordinate
+# space.  Must be called before any window or GDI operations.
+try:
+    # Windows 8.1+
+    _ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+except (AttributeError, OSError):
+    try:
+        # Fallback: Windows Vista+
+        _ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
 
 
 class Win32Window(AbstractWindow):

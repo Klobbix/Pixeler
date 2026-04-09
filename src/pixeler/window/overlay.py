@@ -161,14 +161,14 @@ class Overlay:
         key = (*bgr, thickness)
         if key not in self._pens:
             self._pens[key] = win32gui.CreatePen(
-                win32con.PS_SOLID, thickness, win32api.RGB(*bgr)
+                win32con.PS_SOLID, thickness, win32api.RGB(bgr[2], bgr[1], bgr[0])
             )
         return self._pens[key]
 
     def _get_brush(self, color: Color) -> int:
         bgr = (int(color.lower[0]), int(color.lower[1]), int(color.lower[2]))
         if bgr not in self._brushes:
-            self._brushes[bgr] = win32gui.CreateSolidBrush(win32api.RGB(*bgr))
+            self._brushes[bgr] = win32gui.CreateSolidBrush(win32api.RGB(bgr[2], bgr[1], bgr[0]))
         return self._brushes[bgr]
 
     def _release_resources(self) -> None:
@@ -315,7 +315,7 @@ class Overlay:
         """
         hdc = self._get_hdc()
         bgr = (int(color.lower[0]), int(color.lower[1]), int(color.lower[2]))
-        win32gui.SetTextColor(hdc, win32api.RGB(*bgr))
+        win32gui.SetTextColor(hdc, win32api.RGB(bgr[2], bgr[1], bgr[0]))
         win32gui.SetBkMode(hdc, win32con.TRANSPARENT)
         client = win32gui.GetClientRect(self.hwnd)
         rect = (x, y, client[2], client[3])
