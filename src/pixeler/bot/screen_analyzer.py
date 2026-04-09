@@ -104,9 +104,10 @@ class _Entry:
     enabled: bool
     # kind-specific config
     threshold: float = 0.8              # template: min confidence
-    scale: float = 1.0                  # template: manual scale factor
+    scale: float = 1.0                              # template: manual scale factor
     scale_range: Optional[tuple[float, float]] = None  # template: auto multi-scale range (min, max)
-    scale_steps: int = 20               # template: steps for multi-scale search
+    scale_steps: int = 20                           # template: steps for multi-scale search
+    game_resolution: Optional[tuple[int, int]] = None  # template: native (w, h) for auto scale
     numeric: bool = False               # ocr: also run read_number()
     # throttle state (monotonic seconds; 0.0 → always fires on first call)
     last_emit: float = field(default=0.0)
@@ -204,6 +205,7 @@ class ScreenAnalyzer:
         scale: float = 1.0,
         scale_range: tuple[float, float] | None = None,
         scale_steps: int = 20,
+        game_resolution: tuple[int, int] | None = None,
     ) -> None:
         """
         Register a template matcher.
@@ -227,8 +229,14 @@ class ScreenAnalyzer:
                                returns the best match above *threshold*.
                                Slower than a fixed scale but requires no prior
                                knowledge of the DPI or window size.
-        :param scale_steps:    Number of scale steps for the multi-scale search
-                               (default: 20).
+        :param scale_steps:       Number of scale steps for the multi-scale search
+                                  (default: 20).
+        :param game_resolution:   The game's native ``(width, height)`` in pixels
+                                  (e.g. ``(1024, 768)``).  The scale factor is
+                                  computed each frame as
+                                  ``screenshot_width / game_width``, so it stays
+                                  correct if the window is resized or DPI changes.
+                                  Overrides *scale*; ignored when *scale_range* is set.
         """
         template_mat = load_template(template_path)
         entry = self._add(DetectorKind.TEMPLATE, name, template_mat, throttle_s)
@@ -236,6 +244,7 @@ class ScreenAnalyzer:
         entry.scale = scale
         entry.scale_range = scale_range
         entry.scale_steps = scale_steps
+        entry.game_resolution = game_resolution
 
     def add_ocr(
         self,
@@ -413,10 +422,13 @@ class ScreenAnalyzer:
                 scale_steps=entry.scale_steps,
             )
         else:
+            scale = entry.scale
+            if entry.game_resolution is not None:
+                scale = screenshot.shape[1] / entry.game_resolution[0]
             match = find_template(
                 screenshot, template_mat,
                 threshold=entry.threshold,
-                scale=entry.scale,
+                scale=scale,
             )
         if match is None:
             return []
