@@ -8,35 +8,36 @@ looting, banking, crafting, etc.).  Multiple modules can run inside a single
 How to write a module
 ---------------------
 1. Subclass ``GameModule`` and set a unique ``name``.
-2. Override ``on_register(bus, bot)``.  Subscribe to events with
-   ``self.on(event_name, handler)`` and store ``bot`` for input access.
-3. Implement handler methods.  Each receives a single ``Event`` argument.
+2. Decorate handler methods with ``@listens("event.name")`` — they are
+   subscribed automatically when the module is registered.
+3. Optionally override ``on_register(bus, bot)`` for imperative setup
+   (e.g. storing a ``bot`` reference).
 4. Optionally override ``on_deregister()`` to clean up state when the bot stops.
 
 Example::
 
-    from pixeler.modules.base_module import GameModule
+    from pixeler.modules.base_module import GameModule, listens
     from pixeler.events.payloads import DetectionPayload
 
     class CombatModule(GameModule):
         name = "combat"
 
         def on_register(self, bus, bot):
-            self._bot = bot
-            self.on("detection.enemy",   self._attack)
-            self.on("color.health_low",  self._eat_food)
-            self.on("detection.*",       self._log_any)  # wildcard
+            self._bot = bot  # store for use in handlers
 
+        @listens("detection.enemy")
         def _attack(self, event):
             payload: DetectionPayload = event.data
             self.log(f"Attacking enemy at {payload.center}")
             from pixeler.input.mouse import move_and_right_click
             move_and_right_click(*payload.center)
 
+        @listens("color.health_low")
         def _eat_food(self, event):
             from pixeler.input.keyboard import press
             press("1")
 
+        @listens("detection.*")
         def _log_any(self, event):
             self.log(f"Detection: {event.name}")
 
@@ -46,14 +47,47 @@ Example::
 
 from __future__ import annotations
 
+import inspect
 import time
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable
+from abc import ABC
+from typing import TYPE_CHECKING, Callable, List
 
 from pixeler.events.event_bus import Event, EventBus, EventHandler
 
 if TYPE_CHECKING:
     from pixeler.bot.game_bot import GameBot
+
+
+# ---------------------------------------------------------------------------
+# Decorator
+# ---------------------------------------------------------------------------
+
+def listens(*patterns: str) -> Callable:
+    """
+    Decorator that marks a ``GameModule`` method as an event handler.
+
+    The decorated method is automatically subscribed to the given event
+    pattern(s) when the module is registered with a ``GameBot`` — no
+    ``self.on(...)`` call needed inside ``on_register``.
+
+    One or more patterns may be supplied::
+
+        @listens("detection.enemy")
+        def _on_enemy(self, event): ...
+
+        @listens("color.health_low", "ocr.health_bar")
+        def _on_health(self, event): ...
+
+    Patterns follow the same rules as ``EventBus.subscribe()``:
+    exact names, prefix wildcards (``"detection.*"``), or ``"*"``.
+    """
+    def decorator(fn: Callable) -> Callable:
+        # Store patterns directly on the function object so they survive
+        # the class body and bound-method lookup later.
+        existing: List[str] = getattr(fn, "_listens_patterns", [])
+        fn._listens_patterns = existing + list(patterns)
+        return fn
+    return decorator
 
 
 class GameModule(ABC):
@@ -79,20 +113,21 @@ class GameModule(ABC):
         self._subscribed: list[tuple[str, EventHandler]] = []
 
     # ------------------------------------------------------------------
-    # Abstract interface
+    # Lifecycle hooks
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def on_register(self, bus: EventBus, bot: GameBot) -> None:
         """
         Called once when the module is added to a ``GameBot``.
 
-        Subscribe to events here using ``self.on()``.  Store a reference to
-        *bot* for access to the window, input helpers, and other modules::
+        Override to subscribe to events via ``self.on()`` or to store a
+        reference to *bot* for access to the window and input helpers.
+        Handlers decorated with ``@listens`` are subscribed automatically
+        before this method is called, so ``on_register`` is only needed for
+        imperative setup::
 
             def on_register(self, bus, bot):
-                self._bot = bot
-                self.on("detection.enemy", self._handle_enemy)
+                self._bot = bot  # store bot for use in handlers
 
         :param bus: The shared ``EventBus`` for this bot.
         :param bot: The ``GameBot`` this module is registered on.
@@ -161,6 +196,18 @@ class GameModule(ABC):
     # ------------------------------------------------------------------
     # Internal lifecycle (called by GameBot, not by user code)
     # ------------------------------------------------------------------
+
+    def _autowire(self) -> None:
+        """
+        Subscribe all ``@listens``-decorated methods on this instance.
+
+        Called by ``GameBot.add_module()`` after ``_bus`` is set, before
+        ``on_register()``.  User code should not call this directly.
+        """
+        for _, method in inspect.getmembers(self, predicate=inspect.ismethod):
+            patterns: List[str] = getattr(method, "_listens_patterns", [])
+            for pattern in patterns:
+                self.on(pattern, method)
 
     def _deregister(self) -> None:
         """

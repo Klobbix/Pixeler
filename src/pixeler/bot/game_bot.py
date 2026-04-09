@@ -111,6 +111,7 @@ class GameBot(Bot):
             )
         module._bus = self._bus       # give the module its bus reference
         module._bot = self            # give the module its bot reference
+        module._autowire()            # subscribe @listens-decorated methods
         module.on_register(self._bus, self)
         self._modules[module.name] = module
         self.log(f"Module '{module.name}' registered.")
