@@ -13,6 +13,20 @@ Users never override ``step()`` on a ``GameBot``.  Instead they:
 2. Write ``GameModule`` subclasses and add them via ``bot.add_module()``.
 3. Call ``bot.start()``.
 
+Overlay
+-------
+When *window* is a ``Win32Window`` the bot automatically creates a single
+transparent overlay that lives for the full session.  Every step:
+
+1. ``overlay.begin_frame()`` is called (clears previous frame, syncs position).
+2. Detectors run and events are dispatched — module handlers may call
+   ``self.overlay.draw_*()`` freely.
+3. ``overlay.end_frame()`` is called (flushes the frame).
+
+Pass ``overlay=False`` to opt out of automatic overlay creation.  The overlay
+is accessible via ``bot.overlay`` (``None`` when not created or when using a
+cross-platform ``Window``).
+
 Lifecycle events
 ----------------
 The bus receives lifecycle events automatically:
@@ -58,17 +72,25 @@ class GameBot(Bot):
     """
     Automation bot with an event bus, vision pipeline, and module registry.
 
-    :param window: The game window to capture screenshots from.  Pass a
-                   ``Win32Window`` for overlay support, or ``Window`` for
-                   cross-platform use.  May be ``None`` if you handle
-                   screenshots yourself by overriding ``_get_screenshot()``.
+    :param window:  The game window to capture screenshots from.  Pass a
+                    ``Win32Window`` for overlay support, or ``Window`` for
+                    cross-platform use.  May be ``None`` if you handle
+                    screenshots yourself by overriding ``_get_screenshot()``.
+    :param overlay: ``True`` (default) to auto-create a shared overlay when
+                    *window* is a ``Win32Window``.  Pass ``False`` to disable.
     """
 
-    def __init__(self, window: Optional[Union[Window, Win32Window]] = None) -> None:
+    def __init__(
+        self,
+        window: Optional[Union[Window, Win32Window]] = None,
+        overlay: bool = True,
+    ) -> None:
         super().__init__(window=window)
         self._bus = EventBus()
         self._analyzer = ScreenAnalyzer(self._bus)
         self._modules: Dict[str, "GameModule"] = {}  # name → module  # noqa: F821
+        self._overlay: Optional["Overlay"] = None  # noqa: F821
+        self._overlay_enabled = overlay and isinstance(window, Win32Window)
 
     # ------------------------------------------------------------------
     # Public properties
@@ -78,6 +100,18 @@ class GameBot(Bot):
     def bus(self) -> EventBus:
         """The shared ``EventBus`` for this bot and all its modules."""
         return self._bus
+
+    @property
+    def overlay(self) -> Optional["Overlay"]:  # noqa: F821
+        """
+        The shared transparent overlay for this bot session, or ``None``.
+
+        Available after ``start()`` is called when *window* is a
+        ``Win32Window`` and *overlay* was not disabled.  Module handlers
+        may call ``self.overlay.draw_*()`` directly — ``begin_frame()`` and
+        ``end_frame()`` are managed automatically by the bot.
+        """
+        return self._overlay
 
     @property
     def analyzer(self) -> ScreenAnalyzer:
@@ -139,6 +173,11 @@ class GameBot(Bot):
     # ------------------------------------------------------------------
 
     def on_start(self) -> None:
+        if self._overlay_enabled:
+            from pixeler.window.overlay import Overlay
+            self._overlay = Overlay(self.window.hwnd)
+            self._overlay.start()
+            self.log("Overlay started.")
         self._bus.emit(Event(
             name=names.BOT_STARTED,
             data=BotLifecyclePayload(status=BotStatus.RUNNING, elapsed=0.0),
@@ -154,6 +193,10 @@ class GameBot(Bot):
             data=BotLifecyclePayload(status=BotStatus.STOPPED, elapsed=self.elapsed()),
             source="GameBot",
         ))
+        if self._overlay is not None:
+            self._overlay.stop()
+            self._overlay = None
+            self.log("Overlay stopped.")
 
     def pause(self) -> None:
         super().pause()
@@ -185,9 +228,19 @@ class GameBot(Bot):
         emits the resulting events onto the bus.  Modules receive those events
         synchronously and perform their automation actions.
 
+        When an overlay is active, the frame is bracketed automatically:
+        ``begin_frame()`` is called before detection, ``end_frame()`` after.
+        Module handlers may call ``self.overlay.draw_*()`` freely within
+        their event callbacks — they do not need to manage the frame lifecycle.
+
         **Do not override this method.**  Write a ``GameModule`` instead.
         """
         if self.window is None:
             return
         screenshot = self.window.screenshot()
+        if self._overlay is not None:
+            self._overlay.begin_frame()
+            self._overlay.set_draw_resolution(screenshot.shape[1], screenshot.shape[0])
         self._analyzer.analyze(screenshot)
+        if self._overlay is not None:
+            self._overlay.end_frame()

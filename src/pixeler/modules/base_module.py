@@ -18,17 +18,20 @@ Example::
 
     from pixeler.modules.base_module import GameModule, listens
     from pixeler.events.payloads import DetectionPayload
+    from pixeler.vision.color import GREEN, RED
 
     class CombatModule(GameModule):
         name = "combat"
-
-        def on_register(self, bus, bot):
-            self._bot = bot  # store for use in handlers
 
         @listens("detection.enemy")
         def _attack(self, event):
             payload: DetectionPayload = event.data
             self.log(f"Attacking enemy at {payload.center}")
+            # Draw onto the shared overlay — no setup required
+            if self.overlay:
+                tl, br = payload.rect[:2], payload.rect[2:]
+                self.overlay.draw_rect(tl, br, RED, thickness=2)
+                self.overlay.draw_label("enemy", tl, RED)
             from pixeler.input.mouse import move_and_right_click
             move_and_right_click(*payload.center)
 
@@ -36,10 +39,6 @@ Example::
         def _eat_food(self, event):
             from pixeler.input.keyboard import press
             press("1")
-
-        @listens("detection.*")
-        def _log_any(self, event):
-            self.log(f"Detection: {event.name}")
 
         def on_deregister(self):
             self.log("Combat module stopped.")
@@ -50,7 +49,7 @@ from __future__ import annotations
 import inspect
 import time
 from abc import ABC
-from typing import TYPE_CHECKING, Callable, List
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from pixeler.events.event_bus import Event, EventBus, EventHandler
 
@@ -144,6 +143,22 @@ class GameModule(ABC):
     # ------------------------------------------------------------------
     # Convenience helpers (available inside on_register and handlers)
     # ------------------------------------------------------------------
+
+    @property
+    def overlay(self) -> Optional["Overlay"]:  # noqa: F821
+        """
+        The bot's shared overlay, or ``None`` if no overlay is active.
+
+        Call ``self.overlay.draw_*()`` from any event handler to draw onto
+        the current frame.  The frame lifecycle (``begin_frame`` /
+        ``end_frame``) is managed by the bot — modules never need to call it.
+
+        Returns ``None`` when the bot was created without a ``Win32Window``,
+        when *overlay=False* was passed, or before the bot has started.
+        """
+        if self._bot is None:
+            return None
+        return self._bot.overlay
 
     def on(self, event_name: str, handler: EventHandler) -> None:
         """
