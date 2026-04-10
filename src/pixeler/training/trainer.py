@@ -69,6 +69,7 @@ class YOLOTrainer:
     def train(
         self,
         epochs: int = 50,
+        patience: int = 50,
         imgsz: int = 640,
         device: str = "cpu",
         out_path: Optional[Path] = None,
@@ -81,6 +82,7 @@ class YOLOTrainer:
         if ``out_path`` is None).
 
         :param epochs:   Number of training epochs.
+        :param patience: Number of epochs to wait for improvement before early stopping.
         :param imgsz:    Square input resolution (pixels) for YOLO.
         :param device:   ``"cpu"``, ``"cuda:0"``, ``"mps"``, etc.
         :param out_path: Where to write the exported ``.onnx`` file.
@@ -115,6 +117,7 @@ class YOLOTrainer:
         results = model.train(
             data=str(yaml_path),
             epochs=epochs,
+            patience=patience,
             imgsz=imgsz,
             device=device,
             project=str(yolo_project),

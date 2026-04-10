@@ -98,6 +98,8 @@ def train_main() -> None:
                         help="Output path for the .onnx model file.")
     parser.add_argument("--epochs",  type=int, default=50,
                         help="Number of training epochs (default: 50).")
+    parser.add_argument("--patience",  type=int, default=50,
+                        help="Number of epochs to wait for improvement before early stopping (default: 50).")
     parser.add_argument("--imgsz",   type=int, default=640,
                         help="YOLO input image size (default: 640).")
     parser.add_argument("--model",   default="n",
@@ -125,6 +127,7 @@ def train_main() -> None:
     trainer = YOLOTrainer(dataset=ds, model_size=f"yolov8{args.model}")
     onnx_path = trainer.train(
         epochs=args.epochs,
+        patience=args.patience,
         imgsz=args.imgsz,
         device=args.device,
         out_path=Path(args.out),
