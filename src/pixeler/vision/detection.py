@@ -225,6 +225,66 @@ def find_template_multiscale(
     return best
 
 
+def _rotate_mat(mat: cv2.Mat, angle: float) -> cv2.Mat:
+    """
+    Rotate *mat* by *angle* degrees counter-clockwise, expanding the canvas
+    so no corners are clipped.
+    """
+    h, w = mat.shape[:2]
+    cx, cy = w / 2.0, h / 2.0
+    M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+    cos = abs(M[0, 0])
+    sin = abs(M[0, 1])
+    new_w = int(h * sin + w * cos)
+    new_h = int(h * cos + w * sin)
+    M[0, 2] += new_w / 2.0 - cx
+    M[1, 2] += new_h / 2.0 - cy
+    return cv2.warpAffine(mat, M, (new_w, new_h))
+
+
+def find_template_multiangle(
+    image: cv2.Mat,
+    template: cv2.Mat,
+    method: int = cv2.TM_CCOEFF_NORMED,
+    threshold: float = 0.8,
+    angle_range: tuple[float, float] = (0.0, 360.0),
+    angle_steps: int = 36,
+    scale: float = 1.0,
+) -> TemplateMatch | None:
+    """
+    Find *template* inside *image* by trying a range of rotation angles and
+    returning the best match above *threshold*.
+
+    Useful when the sprite may appear at different orientations (e.g. a
+    character facing left vs right, or a spinning icon).
+
+    The template is rotated at each step — the canvas is expanded to prevent
+    corner clipping, so the returned ``TemplateMatch`` dimensions reflect the
+    rotated bounding box.  The ``center`` property is still accurate.
+
+    :param image:        BGR screenshot to search within.
+    :param template:     BGR reference image to look for.
+    :param method:       OpenCV matching method (default: TM_CCOEFF_NORMED).
+    :param threshold:    Minimum confidence [0–1] to accept a match.
+    :param angle_range:  ``(start_deg, end_deg)`` rotation range to search.
+                         ``(0, 360)`` covers full rotation (default).
+                         ``(-45, 45)`` covers a ±45° tilt.
+    :param angle_steps:  Number of evenly-spaced angles to try (default: 36,
+                         i.e. every 10° for a full rotation).
+    :param scale:        Fixed scale factor applied before rotation.
+    :returns: Best TemplateMatch found above threshold, else None.
+    """
+    best: TemplateMatch | None = None
+    for angle in np.linspace(angle_range[0], angle_range[1], int(angle_steps), endpoint=False):
+        rotated = _rotate_mat(template, float(angle))
+        match = find_template(image, rotated, method=method, threshold=0.0, scale=scale)
+        if match is not None and (best is None or match.confidence > best.confidence):
+            best = match
+    if best is None or best.confidence < threshold:
+        return None
+    return best
+
+
 def find_all_templates(image: cv2.Mat,
                        template: cv2.Mat,
                        threshold: float = 0.8,
@@ -280,3 +340,44 @@ def load_template(path: str | Path,
     if img is None:
         raise FileNotFoundError(f"Template image not found: {path}")
     return img
+
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
+
+
+def load_templates(
+    paths: str | Path | List[str | Path],
+    grayscale: bool = False,
+) -> List[cv2.Mat]:
+    """
+    Load one or more template images from disk and return them as a list.
+
+    Accepts:
+    - A single image path.
+    - A directory path — all image files directly inside it are loaded
+      (non-recursive, sorted by filename for determinism).
+    - A list of any mix of the above.
+
+    :param paths:     A single path, a directory path, or a list of paths.
+    :param grayscale: Load as grayscale (faster matching, less memory).
+    :returns: List of loaded ``cv2.Mat`` objects.
+    :raises FileNotFoundError: If a path does not exist or a directory is empty.
+    """
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+
+    resolved: List[Path] = []
+    for p in paths:
+        p = Path(p)
+        if p.is_dir():
+            images = sorted(
+                f for f in p.iterdir()
+                if f.is_file() and f.suffix.lower() in _IMAGE_EXTENSIONS
+            )
+            if not images:
+                raise FileNotFoundError(f"No image files found in directory: {p}")
+            resolved.extend(images)
+        else:
+            resolved.append(p)
+
+    return [load_template(p, grayscale=grayscale) for p in resolved]

@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import cv2
+import numpy as np
 
 from pixeler.events.event_bus import Event, EventBus
 from pixeler.events import event_names as names
@@ -74,10 +75,13 @@ from pixeler.math.rectangle import Rectangle
 from pixeler.vision.classifier import Detection, ORBMatcher, YOLOClassifier
 from pixeler.vision.color import ColorFilter
 from pixeler.vision.detection import (
+    TemplateMatch,
+    _rotate_mat,
     find_color_regions,
     find_template,
+    find_template_multiangle,
     find_template_multiscale,
-    load_template,
+    load_templates,
 )
 from pixeler.vision.ocr import read_number, read_text, read_words
 
@@ -108,6 +112,8 @@ class _Entry:
     scale_range: Optional[tuple[float, float]] = None  # template: auto multi-scale range (min, max)
     scale_steps: int = 20                           # template: steps for multi-scale search
     game_resolution: Optional[tuple[int, int]] = None  # template: native (w, h) for auto scale
+    angle_range: Optional[tuple[float, float]] = None  # template: rotation search range (deg)
+    angle_steps: int = 36                           # template: steps for rotation search
     numeric: bool = False               # ocr: also run read_number()
     # throttle state (monotonic seconds; 0.0 → always fires on first call)
     last_emit: float = field(default=0.0)
@@ -199,23 +205,30 @@ class ScreenAnalyzer:
     def add_template(
         self,
         name: str,
-        template_path: Path | str,
+        template_path: Path | str | list[Path | str],
         threshold: float = 0.8,
         throttle_s: float = 0.0,
         scale: float = 1.0,
         scale_range: tuple[float, float] | None = None,
         scale_steps: int = 20,
         game_resolution: tuple[int, int] | None = None,
+        angle_range: tuple[float, float] | None = None,
+        angle_steps: int = 36,
     ) -> None:
         """
         Register a template matcher.
 
-        The template image is loaded from disk once at registration time and
-        cached.  Emits ``template.<name>`` when the reference is found above
-        ``threshold``.
+        All template images are loaded from disk once at registration time and
+        cached.  When multiple frames are supplied the detector tries each one
+        and emits ``template.<name>`` for whichever frame matches best above
+        *threshold* — the entity is still tracked as a single logical object.
 
         :param name:           Template label — used as the event name suffix.
-        :param template_path:  Path to the reference image file.
+        :param template_path:  Path to a reference image, a **directory**
+                               containing frame images (all images in the folder
+                               are loaded automatically), or a list of paths.
+                               All frames are tried each analysis tick and the
+                               best match wins.
         :param threshold:      Minimum ``TM_CCOEFF_NORMED`` confidence [0–1].
         :param throttle_s:     Minimum seconds between detector runs.
         :param scale:          Resize the template by this factor before each
@@ -229,22 +242,32 @@ class ScreenAnalyzer:
                                returns the best match above *threshold*.
                                Slower than a fixed scale but requires no prior
                                knowledge of the DPI or window size.
-        :param scale_steps:       Number of scale steps for the multi-scale search
-                                  (default: 20).
-        :param game_resolution:   The game's native ``(width, height)`` in pixels
-                                  (e.g. ``(1024, 768)``).  The scale factor is
-                                  computed each frame as
-                                  ``screenshot_width / game_width``, so it stays
-                                  correct if the window is resized or DPI changes.
-                                  Overrides *scale*; ignored when *scale_range* is set.
+        :param scale_steps:    Number of scale steps for the multi-scale search
+                               (default: 20).
+        :param game_resolution: The game's native ``(width, height)`` in pixels
+                               (e.g. ``(1024, 768)``).  The scale factor is
+                               computed each frame as
+                               ``screenshot_width / game_width``, so it stays
+                               correct if the window is resized or DPI changes.
+                               Overrides *scale*; ignored when *scale_range* is set.
+        :param angle_range:    ``(start_deg, end_deg)`` to enable rotation search.
+                               The template is rotated at *angle_steps* evenly-spaced
+                               angles and the best match wins.  Use ``(0, 360)`` for
+                               full rotation or ``(-45, 45)`` for a ±45° tilt.
+                               Combines with *scale_range*: each angle is tried at
+                               every scale, so keep *angle_steps* low when both are set.
+        :param angle_steps:    Number of rotation angles to try (default: 36,
+                               i.e. every 10° for a full rotation).
         """
-        template_mat = load_template(template_path)
-        entry = self._add(DetectorKind.TEMPLATE, name, template_mat, throttle_s)
+        template_mats = load_templates(template_path)
+        entry = self._add(DetectorKind.TEMPLATE, name, template_mats, throttle_s)
         entry.threshold = threshold
         entry.scale = scale
         entry.scale_range = scale_range
         entry.scale_steps = scale_steps
         entry.game_resolution = game_resolution
+        entry.angle_range = angle_range
+        entry.angle_steps = angle_steps
 
     def add_ocr(
         self,
@@ -413,28 +436,62 @@ class ScreenAnalyzer:
         return [Event(name=names.color(entry.name), data=payload, source=entry.name)]
 
     def _run_template(self, entry: _Entry, screenshot: cv2.Mat) -> List[Event]:
-        template_mat: cv2.Mat = entry.obj
+        template_mats: List[cv2.Mat] = entry.obj
+        scale = entry.scale
+        if entry.game_resolution is not None and entry.scale_range is None:
+            scale = screenshot.shape[1] / entry.game_resolution[0]
+
+        best = None
+        for template_mat in template_mats:
+            match = self._match_template_mat(entry, screenshot, template_mat, scale)
+            if match is not None and (best is None or match.confidence > best.confidence):
+                best = match
+
+        if best is None:
+            return []
+
+        payload = TemplateMatchPayload(template_name=entry.name, match=best)
+        return [Event(name=names.template(entry.name), data=payload, source=entry.name)]
+
+    def _match_template_mat(
+        self,
+        entry: _Entry,
+        screenshot: cv2.Mat,
+        template_mat: cv2.Mat,
+        scale: float,
+    ) -> TemplateMatch | None:
+        """Try one template mat against the screenshot, respecting scale and angle config."""
+        if entry.angle_range is not None:
+            best: TemplateMatch | None = None
+            for angle in np.linspace(
+                entry.angle_range[0], entry.angle_range[1],
+                int(entry.angle_steps), endpoint=False,
+            ):
+                rotated = _rotate_mat(template_mat, float(angle))
+                if entry.scale_range is not None:
+                    match = find_template_multiscale(
+                        screenshot, rotated,
+                        threshold=0.0,
+                        scale_range=entry.scale_range,
+                        scale_steps=entry.scale_steps,
+                    )
+                else:
+                    match = find_template(screenshot, rotated, threshold=0.0, scale=scale)
+                if match is not None and (best is None or match.confidence > best.confidence):
+                    best = match
+            if best is None or best.confidence < entry.threshold:
+                return None
+            return best
+
         if entry.scale_range is not None:
-            match = find_template_multiscale(
+            return find_template_multiscale(
                 screenshot, template_mat,
                 threshold=entry.threshold,
                 scale_range=entry.scale_range,
                 scale_steps=entry.scale_steps,
             )
-        else:
-            scale = entry.scale
-            if entry.game_resolution is not None:
-                scale = screenshot.shape[1] / entry.game_resolution[0]
-            match = find_template(
-                screenshot, template_mat,
-                threshold=entry.threshold,
-                scale=scale,
-            )
-        if match is None:
-            return []
 
-        payload = TemplateMatchPayload(template_name=entry.name, match=match)
-        return [Event(name=names.template(entry.name), data=payload, source=entry.name)]
+        return find_template(screenshot, template_mat, threshold=entry.threshold, scale=scale)
 
     def _run_ocr(self, entry: _Entry, screenshot: cv2.Mat) -> List[Event]:
         region: Rectangle = entry.obj

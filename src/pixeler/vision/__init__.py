@@ -12,8 +12,10 @@ from pixeler.vision.detection import (
     find_color_regions,
     find_largest_color_region,
     find_template,
+    find_template_multiangle,
     find_template_multiscale,
     load_template,
+    load_templates,
     sample_color_at,
 )
 from pixeler.vision.ocr import (
