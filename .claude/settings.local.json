@@ -4,7 +4,9 @@
       "Bash(uv run:*)",
       "Bash(uv pip:*)",
       "Bash(uv sync:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(curl -s \"https://download.pytorch.org/whl/cu130/\")",
+      "Bash(curl -s \"https://download.pytorch.org/whl/cu130/torch/\")"
     ]
   }
 }
