@@ -62,6 +62,14 @@ class Overlay:
         self._msg_thread: threading.Thread | None = None
         self._ready = threading.Event()
 
+        # Optional source-coordinate space (typically the screenshot size the
+        # detections were produced in). When set, all draw primitives scale
+        # their inputs from this space to the overlay's client rect. This
+        # keeps drawings aligned even when a DPI mismatch makes the captured
+        # frame a different size than the overlay's client area.
+        self._draw_w: int | None = None
+        self._draw_h: int | None = None
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -219,6 +227,48 @@ class Overlay:
         if self.hwnd:
             win32gui.UpdateWindow(self.hwnd)
 
+    def set_draw_resolution(self, width: int, height: int) -> None:
+        """
+        Declare the coordinate space your draw calls use — typically the
+        dimensions of the screenshot your detections were produced in.
+
+        When set, every draw call is rescaled from this space to the overlay's
+        client rect, so rectangles land on the right pixels even if DPI
+        scaling makes the screenshot and the overlay a different size.
+
+        Call once after creating the overlay, or any time the source
+        resolution changes.
+        """
+        self._draw_w = int(width)
+        self._draw_h = int(height)
+
+    def clear_draw_resolution(self) -> None:
+        """Disable coordinate scaling; draw calls use overlay client coordinates directly."""
+        self._draw_w = None
+        self._draw_h = None
+
+    def _scale_xy(self, x: int, y: int) -> tuple[int, int]:
+        """Scale a point from the declared draw space into overlay client coordinates."""
+        if self._draw_w is None or self._draw_h is None or not self.hwnd:
+            return int(x), int(y)
+        _, _, cw, ch = win32gui.GetClientRect(self.hwnd)
+        if cw <= 0 or ch <= 0 or self._draw_w <= 0 or self._draw_h <= 0:
+            return int(x), int(y)
+        if cw == self._draw_w and ch == self._draw_h:
+            return int(x), int(y)
+        return (int(round(x * cw / self._draw_w)),
+                int(round(y * ch / self._draw_h)))
+
+    def _scale_len(self, value: int, axis: str) -> int:
+        """Scale a scalar length (radius/size) from draw space to client space."""
+        if self._draw_w is None or self._draw_h is None or not self.hwnd:
+            return int(value)
+        _, _, cw, ch = win32gui.GetClientRect(self.hwnd)
+        if cw <= 0 or ch <= 0 or self._draw_w <= 0 or self._draw_h <= 0:
+            return int(value)
+        ratio = (cw / self._draw_w) if axis == "x" else (ch / self._draw_h)
+        return int(round(value * ratio))
+
     def sync_to_parent(self) -> None:
         """Reposition and resize the overlay to exactly cover the parent window's client area."""
         if not self.hwnd:
@@ -259,9 +309,9 @@ class Overlay:
                  else win32gui.GetStockObject(win32con.NULL_BRUSH))
         win32gui.SelectObject(hdc, pen)
         win32gui.SelectObject(hdc, brush)
-        win32gui.Rectangle(hdc,
-                            top_left[0], top_left[1],
-                            bottom_right[0], bottom_right[1])
+        x1, y1 = self._scale_xy(top_left[0], top_left[1])
+        x2, y2 = self._scale_xy(bottom_right[0], bottom_right[1])
+        win32gui.Rectangle(hdc, x1, y1, x2, y2)
 
     def draw_circle(self,
                     center: tuple[int, int],
@@ -281,8 +331,10 @@ class Overlay:
                  else win32gui.GetStockObject(win32con.NULL_BRUSH))
         win32gui.SelectObject(hdc, pen)
         win32gui.SelectObject(hdc, brush)
-        cx, cy = center
-        win32gui.Ellipse(hdc, cx - radius, cy - radius, cx + radius, cy + radius)
+        cx, cy = self._scale_xy(center[0], center[1])
+        rx = self._scale_len(radius, "x")
+        ry = self._scale_len(radius, "y")
+        win32gui.Ellipse(hdc, cx - rx, cy - ry, cx + rx, cy + ry)
 
     def draw_line(self,
                   start: tuple[int, int],
@@ -293,8 +345,10 @@ class Overlay:
         hdc = self._get_hdc()
         pen = self._get_pen(color, thickness)
         win32gui.SelectObject(hdc, pen)
-        _MoveToEx(hdc, start[0], start[1], None)
-        _LineTo(hdc, end[0], end[1])
+        sx, sy = self._scale_xy(start[0], start[1])
+        ex, ey = self._scale_xy(end[0], end[1])
+        _MoveToEx(hdc, sx, sy, None)
+        _LineTo(hdc, ex, ey)
 
     def draw_crosshair(self,
                        center: tuple[int, int],
@@ -328,7 +382,8 @@ class Overlay:
         win32gui.SetTextColor(hdc, win32api.RGB(bgr[2], bgr[1], bgr[0]))
         win32gui.SetBkMode(hdc, win32con.TRANSPARENT)
         client = win32gui.GetClientRect(self.hwnd)
-        rect = (x, y, client[2], client[3])
+        sx, sy = self._scale_xy(x, y)
+        rect = (sx, sy, client[2], client[3])
         win32gui.DrawText(hdc, text, -1, rect, flags)
 
     def draw_label(self,

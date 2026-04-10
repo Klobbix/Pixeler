@@ -17,16 +17,33 @@ from pixeler.window.abstract_window import AbstractWindow
 
 # Make the process per-monitor DPI aware so that GetWindowRect, GDI drawing,
 # and MSS screen capture all operate in the same physical-pixel coordinate
-# space.  Must be called before any window or GDI operations.
-try:
-    # Windows 8.1+
-    _ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
-except (AttributeError, OSError):
+# space.  Must happen before any window or GDI operations in the process.
+#
+# We try the three APIs in order from newest to oldest. The older calls
+# return HRESULTs (not exceptions) when the process has already been marked
+# DPI-aware by someone else, so a non-zero return on SetProcessDpiAwareness
+# is not a real failure — we just move on.
+def _init_dpi_awareness() -> None:
+    # Windows 10 1703+: DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (-4)
     try:
-        # Fallback: Windows Vista+
+        if _ctypes.windll.user32.SetProcessDpiAwarenessContext(-4):
+            return
+    except (AttributeError, OSError):
+        pass
+    # Windows 8.1+: PROCESS_PER_MONITOR_DPI_AWARE (2)
+    try:
+        _ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except (AttributeError, OSError):
+        pass
+    # Windows Vista+: system-DPI aware
+    try:
         _ctypes.windll.user32.SetProcessDPIAware()
     except (AttributeError, OSError):
         pass
+
+
+_init_dpi_awareness()
 
 
 class Win32Window(AbstractWindow):
