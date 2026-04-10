@@ -6,6 +6,7 @@ the game window itself, or precise control over Win32 window behaviour.
 """
 
 import ctypes as _ctypes
+import threading
 
 import cv2
 import numpy as np
@@ -50,7 +51,7 @@ class Win32Window(AbstractWindow):
 
     def __init__(self, title: str):
         self.hwnd: int = self._hwnd_from_title(title)
-        self._mss: mss | None = None
+        self._local = threading.local()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -72,12 +73,12 @@ class Win32Window(AbstractWindow):
         return found[0]
 
     def _mss_grab(self) -> cv2.Mat:
-        if self._mss is None:
-            self._mss = mss()
+        if not hasattr(self._local, 'mss'):
+            self._local.mss = mss()
         x, y = win32gui.ClientToScreen(self.hwnd, (0, 0))
         _, _, w, h = win32gui.GetClientRect(self.hwnd)
         box = {'top': y, 'left': x, 'width': w, 'height': h}
-        shot = self._mss.grab(box)
+        shot = self._local.mss.grab(box)
         return cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
 
     # ------------------------------------------------------------------
@@ -97,9 +98,9 @@ class Win32Window(AbstractWindow):
         win32gui.MoveWindow(self.hwnd, x, y, self.width(), self.height(), True)
 
     def close(self) -> None:
-        if self._mss is not None:
-            self._mss.close()
-            self._mss = None
+        if hasattr(self._local, 'mss'):
+            self._local.mss.close()
+            del self._local.mss
 
     def position(self) -> tuple[int, int, int, int]:
         return win32gui.GetWindowRect(self.hwnd)

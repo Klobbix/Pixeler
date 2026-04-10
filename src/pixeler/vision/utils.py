@@ -13,8 +13,6 @@ import cv2
 import numpy as np
 from mss.screenshot import ScreenShot
 
-from pixeler.vision.color import Color
-
 
 # ---------------------------------------------------------------------------
 # Format conversion

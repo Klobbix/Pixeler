@@ -8,7 +8,7 @@ Two complementary approaches:
   UI elements with a fixed appearance (buttons, icons, cursors).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 

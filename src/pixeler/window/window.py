@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import pywinctl
 from mss import mss
-from pywinbox import Point
 
 from pixeler.window.abstract_window import AbstractWindow
 

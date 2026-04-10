@@ -5,7 +5,6 @@ Quadratic curves (3 control points) suit short distances; cubic curves
 (4 control points) provide more expressive arcs for longer movements.
 """
 
-import math
 import random
 from typing import List
 

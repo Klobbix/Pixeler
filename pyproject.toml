@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pixeler"
-version = "0.0.14"
+version = "0.0.15"
 authors = [
     { name="Klobbix", email="klobbix@gmail.com" },
 ]
@@ -28,7 +28,7 @@ dependencies=[
 ]
 
 [project.optional-dependencies]
-train = ["ultralytics>=8.0"]
+train = ["ultralytics>=8.0","torch==2.11.0+cu130", "torchvision==0.26.0+cu130"]
 
 [project.scripts]
 pixeler-capture = "pixeler.training.cli:capture_main"
@@ -37,3 +37,12 @@ pixeler-train   = "pixeler.training.cli:train_main"
 [project.urls]
 Homepage = "https://github.com/klobbix/Pixeler"
 Issues = "https://github.com/klobbix/Pixeler/issues"
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }

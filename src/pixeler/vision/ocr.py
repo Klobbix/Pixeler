@@ -17,7 +17,6 @@ import cv2
 import numpy as np
 from pytesseract import pytesseract
 
-from pixeler.math.point import Point
 from pixeler.math.rectangle import Rectangle
 from pixeler.vision.utils import preprocess_for_ocr
 

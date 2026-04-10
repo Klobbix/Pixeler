@@ -10,7 +10,7 @@ import random
 import secrets
 import time
 from datetime import datetime
-from typing import List, Union
+from typing import List
 
 import numpy as np
 
